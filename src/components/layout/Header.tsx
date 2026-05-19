@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation"
 import {
-  LogOut, User, Settings, Bell, ChevronDown,
+  LogOut, Settings, Bell, ChevronDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -16,8 +16,6 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { SidebarTrigger } from "@/components/ui/sidebar"
-import { Separator } from "@/components/ui/separator"
-import { Breadcrumb } from "./Breadcrumb"
 import { signOut, useSession } from "@/lib/auth-client"
 
 export function Header() {
@@ -36,28 +34,19 @@ export function Header() {
   }
 
   return (
-    <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
-      {/* Sidebar toggle + breadcrumb */}
+    <header className="flex h-12 shrink-0 items-center gap-2 border-b bg-background px-4">
       <div className="flex flex-1 items-center gap-2">
         <SidebarTrigger className="-ml-1" />
-        <Separator orientation="vertical" className="h-4" />
-        <Breadcrumb />
       </div>
 
-      {/* Right side actions */}
       <div className="flex items-center gap-1">
-        {/* Notification bell — placeholder */}
         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" aria-label="Notifikasi">
           <Bell className="h-4 w-4" />
         </Button>
 
-        {/* User menu */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className="flex items-center gap-2 h-8 px-2 rounded-lg"
-            >
+            <Button variant="ghost" className="flex items-center gap-2 h-8 px-2 rounded-lg">
               <Avatar className="h-6 w-6">
                 <AvatarFallback className="text-[10px] font-semibold bg-primary text-primary-foreground">
                   {initials}
@@ -74,14 +63,10 @@ export function Header() {
             <DropdownMenuLabel className="font-normal">
               <div className="flex flex-col gap-1">
                 <p className="text-sm font-semibold leading-none">{user?.name}</p>
-                <p className="text-xs text-muted-foreground leading-none truncate">
-                  {user?.email}
-                </p>
+                <p className="text-xs text-muted-foreground leading-none truncate">{user?.email}</p>
               </div>
             </DropdownMenuLabel>
-
             <DropdownMenuSeparator />
-
             <DropdownMenuGroup>
               <DropdownMenuItem asChild>
                 <a href="/settings" className="cursor-pointer">
@@ -90,9 +75,7 @@ export function Header() {
                 </a>
               </DropdownMenuItem>
             </DropdownMenuGroup>
-
             <DropdownMenuSeparator />
-
             <DropdownMenuItem
               onClick={handleLogout}
               className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"

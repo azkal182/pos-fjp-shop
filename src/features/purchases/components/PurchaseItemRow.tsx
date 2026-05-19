@@ -51,9 +51,9 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
 
   function selectProduct(product: Product) {
     setSelectedProduct(product)
-    setValue(`items.${index}.productId`, product.id)
-    setValue(`items.${index}.buyPrice`, product.buyPrice)
-    setSearch(product.name)
+    setValue(`items.${index}.productId`, product.id, { shouldValidate: true })
+    setValue(`items.${index}.buyPrice`, product.buyPrice, { shouldValidate: true })
+    setSearch(`${product.name} (${product.code})`)
     setShowDropdown(false)
     setActiveIndex(-1)
   }
@@ -151,7 +151,8 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
           min={1}
           placeholder="1"
           className="text-sm text-center"
-          {...register(`items.${index}.quantity`, { valueAsNumber: true })}
+          value={Number(qty) || ""}
+          onChange={(e) => setValue(`items.${index}.quantity`, Number(e.target.value), { shouldValidate: true })}
           aria-invalid={!!itemErrors?.quantity}
         />
         {itemErrors?.quantity && (
@@ -168,7 +169,8 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
             min={0}
             placeholder="0"
             className="text-sm pl-7"
-            {...register(`items.${index}.buyPrice`, { valueAsNumber: true })}
+            value={Number(buyPrice) || ""}
+            onChange={(e) => setValue(`items.${index}.buyPrice`, Number(e.target.value), { shouldValidate: true })}
             aria-invalid={!!itemErrors?.buyPrice}
           />
         </div>

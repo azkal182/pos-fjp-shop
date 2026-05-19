@@ -10,7 +10,6 @@ import {
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -20,6 +19,7 @@ import {
   SidebarMenuItem,
   SidebarRail,
   SidebarSeparator,
+  useSidebar,
 } from "@/components/ui/sidebar"
 import { navItems } from "@/config/nav.config"
 import { APP_NAME } from "@/config/app.config"
@@ -55,6 +55,11 @@ const navGroups = [
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const { setOpenMobile, isMobile } = useSidebar()
+
+  function handleNavClick() {
+    if (isMobile) setOpenMobile(false)
+  }
 
   return (
     <Sidebar collapsible="icon">
@@ -105,6 +110,7 @@ export function AppSidebar() {
                           asChild
                           isActive={isActive}
                           tooltip={item.label}
+                          onClick={handleNavClick}
                         >
                           <Link href={item.href}>
                             {Icon && <Icon />}

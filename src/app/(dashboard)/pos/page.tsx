@@ -1,7 +1,7 @@
 "use client"
 
-import { useState } from "react"
-import { CreditCard, ShoppingBag, SlidersHorizontal, X } from "lucide-react"
+import { useState, useEffect } from "react"
+import { CreditCard, ShoppingBag, SlidersHorizontal, X, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
@@ -17,6 +17,7 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { ProductSearch } from "@/features/pos/components/ProductSearch"
@@ -53,17 +54,31 @@ interface TransactionResult {
 
 export default function POSPage() {
   const toast = useToast()
-  const { items, customerId, paymentMethod, paidAmount, totalAmount, discountAmount } = useCartStore()
+  const { items, customerId, paymentMethod, paidAmount, totalAmount, discountAmount, clearCart } = useCartStore()
 
   const [isPaymentOpen, setIsPaymentOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [lastTransaction, setLastTransaction] = useState<TransactionResult | null>(null)
   const [isReceiptOpen, setIsReceiptOpen] = useState(false)
-  const [isPanelOpen, setIsPanelOpen] = useState(false) // mobile panel sheet
+  const [isPanelOpen, setIsPanelOpen] = useState(false)
+  const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
 
   const total = totalAmount()
   const cartEmpty = items.length === 0
-  const totalItems = items.reduce((s, i) => s + i.quantity, 0)
+  const totalQty = items.reduce((s, i) => s + i.quantity, 0)
+  const totalProducts = items.length // jumlah jenis produk
+
+  // Prevent navigation jika ada item di keranjang
+  useEffect(() => {
+    function handleBeforeUnload(e: BeforeUnloadEvent) {
+      if (items.length > 0) {
+        e.preventDefault()
+        e.returnValue = ""
+      }
+    }
+    window.addEventListener("beforeunload", handleBeforeUnload)
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload)
+  }, [items.length])
 
   async function handleCheckout() {
     setIsSubmitting(true)
@@ -99,7 +114,7 @@ export default function POSPage() {
     }
   }
 
-  // Shared panel content (used in both desktop sidebar and mobile sheet)
+  // Panel kasir — shared antara desktop sidebar dan mobile sheet
   const PanelContent = () => (
     <>
       <div className="flex-1 overflow-y-auto overflow-x-visible px-4 py-4 space-y-5">
@@ -160,12 +175,25 @@ export default function POSPage() {
           )}
         </div>
 
-        {/* Footer kiri */}
-        <div className="bg-background border-t px-3 py-2 sm:px-4 flex items-center justify-between">
+        {/* Footer kiri — info + tombol kosongkan */}
+        <div className="bg-background border-t px-3 py-2 sm:px-4 flex items-center justify-between gap-2">
           {!cartEmpty ? (
-            <p className="text-xs text-muted-foreground">
-              {items.length} produk · {totalItems} item
-            </p>
+            <div className="flex items-center gap-3">
+              <p className="text-xs text-muted-foreground">
+                <span className="font-semibold text-foreground">{totalProducts}</span> produk
+                {" · "}
+                <span className="font-semibold text-foreground">{totalQty}</span> item
+              </p>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 text-xs text-destructive hover:text-destructive gap-1 px-2"
+                onClick={() => setIsClearConfirmOpen(true)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Kosongkan
+              </Button>
+            </div>
           ) : (
             <span />
           )}
@@ -182,14 +210,14 @@ export default function POSPage() {
             Kasir
             {!cartEmpty && (
               <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                {totalItems}
+                {totalQty}
               </Badge>
             )}
           </Button>
         </div>
       </div>
 
-      {/* ── Desktop: Panel kasir (sidebar kanan) ── */}
+      {/* ── Desktop: Panel kasir ── */}
       <div className="hidden sm:flex w-[300px] lg:w-[320px] flex-col bg-background border-l">
         <div className="px-4 py-3 border-b">
           <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Panel Kasir</h2>
@@ -213,6 +241,16 @@ export default function POSPage() {
           <PanelContent />
         </SheetContent>
       </Sheet>
+
+      {/* Confirm kosongkan keranjang */}
+      <ConfirmDialog
+        open={isClearConfirmOpen}
+        onConfirm={() => { clearCart(); setIsClearConfirmOpen(false) }}
+        onCancel={() => setIsClearConfirmOpen(false)}
+        title="Kosongkan Keranjang"
+        description="Semua item di keranjang akan dihapus. Lanjutkan?"
+        confirmLabel="Kosongkan"
+      />
 
       {/* Payment Modal */}
       <PaymentModal
