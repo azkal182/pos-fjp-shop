@@ -10,6 +10,7 @@ import { VendorDebtSummary } from "@/features/vendors/components/VendorDebtSumma
 import { VendorDebtTable } from "@/features/vendors/components/VendorDebtTable"
 import { VendorLedger } from "@/features/vendors/components/VendorLedger"
 import { VendorForm } from "@/features/vendors/components/VendorForm"
+import { DepositCard } from "@/features/deposits/components/DepositCard"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
 import { useToast } from "@/hooks/useToast"
 import type { PaginationMeta } from "@/types"
@@ -131,6 +132,7 @@ export default function VendorDetailPage() {
             </div>
           </div>
           <VendorDebtSummary vendorId={id} refreshKey={refreshKey} />
+          <DepositCard partyType="VENDOR" partyId={id} refreshKey={refreshKey} />
         </div>
 
         {/* Main */}
