@@ -240,7 +240,7 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
                     <Input
                       type="number" min={0} placeholder="Kosong = bayar lunas"
                       className="pl-7 text-sm h-8"
-                      {...register("paidAmount", { valueAsNumber: true })}
+                      {...register("paidAmount")}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">Isi jika bayar sebagian — sisa jadi hutang ke vendor</p>

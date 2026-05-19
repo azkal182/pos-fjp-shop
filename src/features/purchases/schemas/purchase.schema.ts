@@ -12,7 +12,11 @@ export const createPurchaseSchema = z.object({
   items: z.array(purchaseItemSchema).min(1, "Minimal 1 item"),
   notes: z.string().optional(),
   confirmedPriceUpdates: z.array(z.string()).optional(),
-  paidAmount: z.number().min(0).optional(),
+  paidAmount: z.union([
+    z.number().min(0),
+    z.nan().transform(() => undefined),
+    z.undefined(),
+  ]).optional(),
   paymentMethod: z.enum(["CASH", "TRANSFER"]).optional(),
 })
 
