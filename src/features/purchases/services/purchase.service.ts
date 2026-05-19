@@ -36,6 +36,7 @@ export async function getAllPurchases(filter: PurchaseFilter = {}) {
       include: {
         vendor: { select: { id: true, name: true } },
         _count: { select: { items: true } },
+        vendorDebt: { select: { id: true, remainingAmount: true, status: true } },
       },
       orderBy: { purchaseDate: "desc" },
       skip: (page - 1) * limit,

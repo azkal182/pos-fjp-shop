@@ -11,6 +11,7 @@ import { VendorDebtTable } from "@/features/vendors/components/VendorDebtTable"
 import { VendorLedger } from "@/features/vendors/components/VendorLedger"
 import { VendorForm } from "@/features/vendors/components/VendorForm"
 import { DepositCard } from "@/features/deposits/components/DepositCard"
+import { VendorPurchaseHistory } from "@/features/vendors/components/VendorPurchaseHistory"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
 import { useToast } from "@/hooks/useToast"
 import type { PaginationMeta } from "@/types"
@@ -141,6 +142,7 @@ export default function VendorDetailPage() {
             <TabsList className="w-full">
               <TabsTrigger value="ledger" className="flex-1">Buku Besar</TabsTrigger>
               <TabsTrigger value="debts" className="flex-1">Hutang per PO</TabsTrigger>
+              <TabsTrigger value="purchases" className="flex-1">Riwayat Pembelian</TabsTrigger>
             </TabsList>
             <TabsContent value="ledger" className="mt-4">
               <VendorLedger vendorId={id} refreshKey={refreshKey} />
@@ -155,6 +157,9 @@ export default function VendorDetailPage() {
                 onPageChange={setPage}
                 onRefetch={handlePaymentSuccess}
               />
+            </TabsContent>
+            <TabsContent value="purchases" className="mt-4">
+              <VendorPurchaseHistory vendorId={id} vendorName={vendor.name} onPaymentSuccess={handlePaymentSuccess} />
             </TabsContent>
           </Tabs>
         </div>

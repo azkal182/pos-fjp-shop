@@ -105,7 +105,7 @@ export async function getLedger(partyType: PartyType, partyId: string, filter: L
     where: { partyType_partyId: { partyType, partyId } },
   })
 
-  if (!account) return { entries: [], balance: 0, totalEntries: 0 }
+  if (!account) return { entries: [], balance: 0, totalEntries: 0, totalDebit: 0, totalCredit: 0 }
 
   const where = {
     accountId: account.id,
@@ -117,6 +117,14 @@ export async function getLedger(partyType: PartyType, partyId: string, filter: L
       },
     }),
   }
+
+  // Ambil summary dari SEMUA entries (bukan hanya halaman ini)
+  const allEntries = await globalPrisma.ledgerEntry.findMany({
+    where: { accountId: account.id },
+    select: { direction: true, amount: true },
+  })
+  const totalDebit = allEntries.filter((e) => e.direction === "DEBIT").reduce((s, e) => s + Number(e.amount), 0)
+  const totalCredit = allEntries.filter((e) => e.direction === "CREDIT").reduce((s, e) => s + Number(e.amount), 0)
 
   const [entries, totalEntries] = await Promise.all([
     globalPrisma.ledgerEntry.findMany({
@@ -130,7 +138,7 @@ export async function getLedger(partyType: PartyType, partyId: string, filter: L
 
   const balance = await getAccountBalance(partyType, partyId)
 
-  return { entries, balance, totalEntries }
+  return { entries, balance, totalEntries, totalDebit, totalCredit }
 }
 
 // ─── Adjustment (reverse entry) ───────────────────────────────────────────────

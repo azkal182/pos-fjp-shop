@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { ChevronDown, ChevronRight, TrendingDown, TrendingUp } from "lucide-react"
+import { TrendingDown, TrendingUp, Wallet } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
@@ -26,6 +26,8 @@ interface LedgerData {
   entries: LedgerEntry[]
   balance: number
   totalEntries: number
+  totalDebit: number   // total semua tagihan (dari semua entries)
+  totalCredit: number  // total semua pembayaran (dari semua entries)
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -39,7 +41,6 @@ const TYPE_LABELS: Record<string, string> = {
 export function VendorLedger({ vendorId, refreshKey }: { vendorId: string; refreshKey?: number }) {
   const [data, setData] = useState<LedgerData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => {
     setIsLoading(true)
@@ -72,9 +73,7 @@ export function VendorLedger({ vendorId, refreshKey }: { vendorId: string; refre
     )
   }
 
-  // Hitung total debit dan kredit
-  const totalDebit = data.entries.filter((e) => e.direction === "DEBIT").reduce((s, e) => s + Number(e.amount), 0)
-  const totalCredit = data.entries.filter((e) => e.direction === "CREDIT").reduce((s, e) => s + Number(e.amount), 0)
+  const isCredit = data.balance < 0 // saldo negatif = toko punya kredit ke vendor (deposit/overpay)
 
   return (
     <Card>
@@ -82,33 +81,43 @@ export function VendorLedger({ vendorId, refreshKey }: { vendorId: string; refre
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Buku Besar Vendor</CardTitle>
           <div className="text-right">
-            <p className="text-xs text-muted-foreground">Saldo Hutang</p>
+            <p className="text-xs text-muted-foreground">
+              {isCredit ? "Kredit ke Vendor (Deposit)" : "Saldo Hutang"}
+            </p>
             <CurrencyDisplay
-              amount={data.balance}
-              className={`text-lg font-bold ${data.balance > 0 ? "text-red-600" : "text-green-600"}`}
+              amount={Math.abs(data.balance)}
+              className={`text-lg font-bold ${isCredit ? "text-blue-600" : data.balance > 0 ? "text-red-600" : "text-muted-foreground"}`}
             />
+            {isCredit && (
+              <p className="text-xs text-blue-500 flex items-center gap-1 justify-end mt-0.5">
+                <Wallet className="h-3 w-3" />
+                Toko punya kredit ke vendor
+              </p>
+            )}
           </div>
         </div>
+
+        {/* Summary dari SEMUA entries */}
         <div className="grid grid-cols-2 gap-3 mt-2">
           <div className="rounded-md bg-red-50 dark:bg-red-950/20 border border-red-100 dark:border-red-900/30 px-3 py-2">
             <div className="flex items-center gap-1.5 text-xs text-red-600 dark:text-red-400 mb-0.5">
               <TrendingDown className="h-3 w-3" />
               Total Tagihan
             </div>
-            <CurrencyDisplay amount={totalDebit} className="text-sm font-semibold text-red-700 dark:text-red-400" />
+            <CurrencyDisplay amount={data.totalDebit} className="text-sm font-semibold text-red-700 dark:text-red-400" />
           </div>
           <div className="rounded-md bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/30 px-3 py-2">
             <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 mb-0.5">
               <TrendingUp className="h-3 w-3" />
               Total Dibayar
             </div>
-            <CurrencyDisplay amount={totalCredit} className="text-sm font-semibold text-green-700 dark:text-green-400" />
+            <CurrencyDisplay amount={data.totalCredit} className="text-sm font-semibold text-green-700 dark:text-green-400" />
           </div>
         </div>
       </CardHeader>
 
       <CardContent className="p-0">
-        <div className="grid grid-cols-[1fr_100px_100px_100px] gap-2 px-4 py-2 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-y">
+        <div className="grid grid-cols-[1fr_100px_100px_110px] gap-2 px-4 py-2 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-y">
           <span>Keterangan</span>
           <span className="text-right">Tagihan (+)</span>
           <span className="text-right">Bayar (−)</span>
@@ -118,8 +127,14 @@ export function VendorLedger({ vendorId, refreshKey }: { vendorId: string; refre
         <div className="divide-y">
           {data.entries.map((entry) => {
             const isDebit = entry.direction === "DEBIT"
+            const balance = Number(entry.runningBalance)
             return (
-              <div key={entry.id} className={`grid grid-cols-[1fr_100px_100px_100px] gap-2 px-4 py-2.5 text-sm items-center ${isDebit ? "bg-red-50/30 dark:bg-red-950/10" : "bg-green-50/30 dark:bg-green-950/10"}`}>
+              <div
+                key={entry.id}
+                className={`grid grid-cols-[1fr_100px_100px_110px] gap-2 px-4 py-2.5 text-sm items-center ${
+                  isDebit ? "bg-red-50/30 dark:bg-red-950/10" : "bg-green-50/30 dark:bg-green-950/10"
+                }`}
+              >
                 <div className="min-w-0">
                   <p className={`font-medium truncate ${isDebit ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"}`}>
                     {TYPE_LABELS[entry.type] ?? entry.type}
@@ -136,10 +151,17 @@ export function VendorLedger({ vendorId, refreshKey }: { vendorId: string; refre
                   {!isDebit && <CurrencyDisplay amount={Number(entry.amount)} className="text-sm font-medium text-green-600 dark:text-green-400" />}
                 </div>
                 <div className="text-right">
-                  <CurrencyDisplay
-                    amount={Number(entry.runningBalance)}
-                    className={`text-sm font-semibold ${Number(entry.runningBalance) > 0 ? "text-red-600" : "text-green-600"}`}
-                  />
+                  {balance < 0 ? (
+                    <span className="text-sm font-semibold text-blue-600">
+                      +<CurrencyDisplay amount={Math.abs(balance)} className="text-sm font-semibold text-blue-600" />
+                      <span className="text-[10px] ml-0.5 opacity-70">kredit</span>
+                    </span>
+                  ) : (
+                    <CurrencyDisplay
+                      amount={balance}
+                      className={`text-sm font-semibold ${balance > 0 ? "text-red-600" : "text-muted-foreground"}`}
+                    />
+                  )}
                 </div>
               </div>
             )
