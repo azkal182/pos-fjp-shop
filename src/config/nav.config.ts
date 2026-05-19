@@ -15,6 +15,7 @@ export const navItems: NavItem[] = [
   { label: "Customer", href: "/customers", icon: "Users" },
   { label: "Transaksi", href: "/transactions", icon: "Receipt" },
   { label: "Hutang", href: "/debts", icon: "CreditCard" },
+  { label: "Hutang Vendor", href: "/vendor-debts", icon: "Building2" },
   { label: "Laporan", href: "/reports", icon: "BarChart2" },
   { label: "Pengaturan", href: "/settings", icon: "Settings" },
   { label: "Pengguna", href: "/users", icon: "UserCog" },

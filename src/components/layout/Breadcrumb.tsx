@@ -21,6 +21,7 @@ const segmentLabels: Record<string, string> = {
   "stock-movements": "Pergerakan Stok",
   customers: "Customer",
   transactions: "Transaksi",
+  "vendor-debts": "Hutang Vendor",
   debts: "Hutang",
   reports: "Laporan",
   settings: "Pengaturan",

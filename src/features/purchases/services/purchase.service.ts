@@ -5,6 +5,7 @@ import { generateCode } from "@/lib/utils"
 import { calculatePagination } from "@/lib/api-response"
 import { createMovement } from "@/features/stock-movements/services/stock-movement.service"
 import { updateAfterPurchase } from "@/features/products/services/product-vendor-price.service"
+import { addEntry } from "@/features/ledger/services/ledger.service"
 import type { CreatePurchaseInput, PriceChange } from "../schemas/purchase.schema"
 
 export interface PurchaseFilter {
@@ -104,14 +105,26 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
     0
   )
 
+  // Hitung payment amounts
+  const paidAmount = data.paidAmount ?? totalAmount // default: lunas
+  const paymentMethod = data.paymentMethod ?? "CASH"
+  const debtAmount = Math.max(0, totalAmount - paidAmount)
+  const overpayAmount = Math.max(0, paidAmount - totalAmount)
+  const paymentStatus = paidAmount >= totalAmount ? "PAID" : paidAmount > 0 ? "PARTIAL" : "UNPAID"
+
   const purchase = await prisma.$transaction(async (tx) => {
-    // 1. Buat Purchase
+    // 1. Buat Purchase dengan payment info
     const purchase = await tx.purchase.create({
       data: {
         code,
         vendorId: data.vendorId,
         userId,
         totalAmount,
+        paidAmount,
+        changeAmount: overpayAmount,
+        debtAmount,
+        paymentStatus,
+        paymentMethod,
         notes: data.notes,
         purchaseDate: new Date(data.purchaseDate),
       },
@@ -126,7 +139,6 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
       const previousBuyPrice = Number(product.buyPrice)
       const priceChanged = previousBuyPrice !== item.buyPrice
 
-      // Buat PurchaseItem
       await tx.purchaseItem.create({
         data: {
           purchaseId: purchase.id,
@@ -139,7 +151,6 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
         },
       })
 
-      // Update stok via createMovement
       await createMovement(tx, {
         productId: item.productId,
         type: "PURCHASE_IN",
@@ -148,24 +159,61 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
         purchaseId: purchase.id,
       })
 
-      // Update harga beli jika dikonfirmasi
       if ((data.confirmedPriceUpdates ?? []).includes(item.productId)) {
         await tx.product.update({
           where: { id: item.productId },
           data: { buyPrice: item.buyPrice },
         })
-        log.warn("[PURCHASE]", "Buy price updated", {
-          productId: item.productId,
-          previousBuyPrice,
-          newBuyPrice: item.buyPrice,
-        })
+        log.warn("[PURCHASE]", "Buy price updated", { productId: item.productId, previousBuyPrice, newBuyPrice: item.buyPrice })
       } else if (priceChanged) {
-        log.warn("[PURCHASE]", "Price change detected but not confirmed", {
-          productId: item.productId,
-          previousBuyPrice,
-          newBuyPrice: item.buyPrice,
-        })
+        log.warn("[PURCHASE]", "Price change detected but not confirmed", { productId: item.productId, previousBuyPrice, newBuyPrice: item.buyPrice })
       }
+    }
+
+    // 3. LedgerEntry: INVOICE DEBIT (hutang toko ke vendor bertambah)
+    await addEntry({
+      partyType: "VENDOR",
+      partyId: data.vendorId,
+      type: "INVOICE",
+      direction: "DEBIT",
+      amount: totalAmount,
+      description: `PO ${code}`,
+      referenceType: "PURCHASE",
+      referenceId: purchase.id,
+      createdBy: userId,
+      createdAt: new Date(data.purchaseDate),
+    }, tx)
+
+    // 4. LedgerEntry: PAYMENT_OUT CREDIT (toko bayar ke vendor)
+    if (paidAmount > 0) {
+      await addEntry({
+        partyType: "VENDOR",
+        partyId: data.vendorId,
+        type: "PAYMENT_OUT",
+        direction: "CREDIT",
+        amount: paidAmount,
+        description: `Bayar PO ${code}`,
+        paymentMethod,
+        referenceType: "PURCHASE",
+        referenceId: purchase.id,
+        createdBy: userId,
+        createdAt: new Date(data.purchaseDate),
+      }, tx)
+    }
+
+    // 5. Buat VendorDebt jika ada hutang
+    if (debtAmount > 0) {
+      await tx.vendorDebt.create({
+        data: {
+          vendorId: data.vendorId,
+          purchaseId: purchase.id,
+          originalAmount: debtAmount,
+          remainingAmount: debtAmount,
+          status: paidAmount === 0 ? "UNPAID" : "PARTIAL",
+          debtDate: new Date(data.purchaseDate),
+        },
+      })
+      log.info("[PURCHASE]", "Vendor debt created", { code, vendorId: data.vendorId, debtAmount })
     }
 
     return purchase
@@ -176,6 +224,9 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
     vendorId: data.vendorId,
     itemCount: data.items.length,
     totalAmount,
+    paidAmount,
+    debtAmount,
+    paymentStatus,
   })
 
   // Update ProductVendorPrice catalog setelah PO selesai

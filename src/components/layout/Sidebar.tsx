@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, ShoppingCart, Package, Tag, Truck, ShoppingBag,
   ArrowLeftRight, Users, Receipt, CreditCard, BarChart2, Settings,
-  UserCog, Store,
+  UserCog, Store, Building2,
 } from "lucide-react"
 import {
   Sidebar,
@@ -26,7 +26,7 @@ import { APP_NAME } from "@/config/app.config"
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard, ShoppingCart, Package, Tag, Truck, ShoppingBag,
-  ArrowLeftRight, Users, Receipt, CreditCard, BarChart2, Settings, UserCog,
+  ArrowLeftRight, Users, Receipt, CreditCard, BarChart2, Settings, UserCog, Building2,
 }
 
 // Kelompokkan nav items
@@ -41,7 +41,7 @@ const navGroups = [
   },
   {
     label: "Penjualan",
-    items: ["Customer", "Transaksi", "Hutang"],
+    items: ["Customer", "Transaksi", "Hutang", "Hutang Vendor"],
   },
   {
     label: "Analitik",

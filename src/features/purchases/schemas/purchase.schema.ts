@@ -12,6 +12,8 @@ export const createPurchaseSchema = z.object({
   items: z.array(purchaseItemSchema).min(1, "Minimal 1 item"),
   notes: z.string().optional(),
   confirmedPriceUpdates: z.array(z.string()).optional(),
+  paidAmount: z.number().min(0).optional(),
+  paymentMethod: z.enum(["CASH", "TRANSFER"]).optional(),
 })
 
 export type PurchaseItemInput = z.infer<typeof purchaseItemSchema>

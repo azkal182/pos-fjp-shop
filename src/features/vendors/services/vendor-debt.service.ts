@@ -29,6 +29,27 @@ export async function hasVendorOutstandingDebt(vendorId: string): Promise<boolea
   return count > 0
 }
 
+export async function getVendorDebtSummary(vendorId: string) {
+  const debts = await globalPrisma.vendorDebt.findMany({
+    where: { vendorId, status: { in: ["UNPAID", "PARTIAL"] } },
+    include: { purchase: { select: { code: true } } },
+    orderBy: { debtDate: "asc" },
+  })
+
+  const totalOutstanding = debts.reduce((s, d) => s + Number(d.remainingAmount), 0)
+  const oldestDebt = debts[0]
+  const oldestDays = oldestDebt
+    ? Math.floor((Date.now() - new Date(oldestDebt.debtDate).getTime()) / 86400000)
+    : null
+
+  return {
+    totalOutstanding,
+    activeDebtsCount: debts.length,
+    oldestDays,
+    debts,
+  }
+}
+
 // Preview FIFO tanpa simpan
 export async function previewFifoAllocation(vendorId: string, totalPayment: number) {
   const debts = await getVendorOutstandingDebts(vendorId)

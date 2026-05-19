@@ -45,6 +45,8 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
       items: [{ productId: "", quantity: 1, buyPrice: 0 }],
       notes: "",
       confirmedPriceUpdates: [],
+      paidAmount: undefined, // akan diisi setelah total dihitung
+      paymentMethod: "CASH",
     },
   })
 
@@ -169,7 +171,7 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
             <div className="rounded-lg border bg-card p-4 space-y-3 lg:sticky lg:top-4">
               <div className="flex items-center gap-2">
                 <ShoppingCart className="h-4 w-4 text-muted-foreground" />
-                <h3 className="text-sm font-semibold">Ringkasan</h3>
+                <h3 className="text-sm font-semibold">Ringkasan & Pembayaran</h3>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
@@ -186,6 +188,42 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
                   <PurchaseTotalAmount control={control} />
                 </div>
               </div>
+
+              <Separator />
+
+              {/* Pembayaran */}
+              <div className="space-y-3">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pembayaran</p>
+                <div className="space-y-2">
+                  <Label className="text-xs">Metode Bayar</Label>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {["CASH", "TRANSFER"].map((m) => (
+                      <button
+                        key={m} type="button"
+                        onClick={() => setValue("paymentMethod", m as "CASH" | "TRANSFER")}
+                        className={`rounded-md border px-2 py-1.5 text-xs font-medium transition-colors ${
+                          watch("paymentMethod") === m ? "border-primary bg-primary/10 text-primary" : "border-border hover:bg-muted"
+                        }`}
+                      >
+                        {m === "CASH" ? "Tunai" : "Transfer"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs">Nominal Bayar <span className="text-muted-foreground">(kosong = lunas)</span></Label>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
+                    <Input
+                      type="number" min={0} placeholder="Kosong = bayar lunas"
+                      className="pl-7 text-sm h-8"
+                      {...register("paidAmount", { valueAsNumber: true })}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Isi jika bayar sebagian — sisa jadi hutang ke vendor</p>
+                </div>
+              </div>
+
               <Button type="submit" disabled={isSubmitting} className="w-full h-10 gap-2">
                 {isSubmitting
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Menyimpan...</>
