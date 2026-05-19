@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { Trash2, Package } from "lucide-react"
-import { useFormContext } from "react-hook-form"
+import { useFormContext, useWatch } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
@@ -22,18 +22,21 @@ interface PurchaseItemRowProps {
 }
 
 export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
-  const { register, watch, setValue, formState: { errors } } = useFormContext<CreatePurchaseInput>()
+  const { register, setValue, control, formState: { errors } } = useFormContext<CreatePurchaseInput>()
+
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState("")
   const [showDropdown, setShowDropdown] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [activeIndex, setActiveIndex] = useState(-1)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const searchInputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
-  const qty = watch(`items.${index}.quantity`) ?? 1
-  const buyPrice = watch(`items.${index}.buyPrice`) ?? 0
+  // useWatch hanya untuk kalkulasi subtotal — tidak menyebabkan re-render input
+  const qty = useWatch({ control, name: `items.${index}.quantity` }) ?? 1
+  const buyPrice = useWatch({ control, name: `items.${index}.buyPrice` }) ?? 0
   const subtotal = (Number(qty) || 0) * (Number(buyPrice) || 0)
+
   const itemErrors = (errors.items as any)?.[index]
 
   useEffect(() => {
@@ -49,18 +52,25 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
     return () => clearTimeout(timer)
   }, [search])
 
+  useEffect(() => {
+    if (activeIndex >= 0 && listRef.current) {
+      const item = listRef.current.children[activeIndex] as HTMLElement
+      item?.scrollIntoView({ block: "nearest" })
+    }
+  }, [activeIndex])
+
   function selectProduct(product: Product) {
     setSelectedProduct(product)
-    setValue(`items.${index}.productId`, product.id, { shouldValidate: true })
-    setValue(`items.${index}.buyPrice`, product.buyPrice, { shouldValidate: true })
-    setSearch(`${product.name} (${product.code})`)
+    // setValue dengan shouldDirty agar form tahu nilai berubah
+    setValue(`items.${index}.productId`, product.id, { shouldDirty: true, shouldValidate: false })
+    setValue(`items.${index}.buyPrice`, product.buyPrice, { shouldDirty: true, shouldValidate: false })
+    setSearch(`${product.name}`)
     setShowDropdown(false)
     setActiveIndex(-1)
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
     if (!showDropdown || products.length === 0) return
-
     if (e.key === "ArrowDown") {
       e.preventDefault()
       setActiveIndex((prev) => Math.min(prev + 1, products.length - 1))
@@ -69,29 +79,19 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
       setActiveIndex((prev) => Math.max(prev - 1, 0))
     } else if (e.key === "Enter") {
       e.preventDefault()
-      if (activeIndex >= 0 && products[activeIndex]) {
-        selectProduct(products[activeIndex])
-      }
+      if (activeIndex >= 0 && products[activeIndex]) selectProduct(products[activeIndex])
     } else if (e.key === "Escape") {
       setShowDropdown(false)
       setActiveIndex(-1)
     }
   }
 
-  // Scroll active item into view
-  useEffect(() => {
-    if (activeIndex >= 0 && listRef.current) {
-      const item = listRef.current.children[activeIndex] as HTMLElement
-      item?.scrollIntoView({ block: "nearest" })
-    }
-  }, [activeIndex])
-
   return (
     <div className="grid grid-cols-[1fr_72px_130px_90px_36px] gap-2 items-start">
-      {/* Produk search */}
+      {/* Produk search — uncontrolled, tidak pakai register */}
       <div className="relative">
         <Input
-          ref={inputRef}
+          ref={searchInputRef}
           value={search}
           onChange={(e) => { setSearch(e.target.value); setShowDropdown(true) }}
           onFocus={() => search && setShowDropdown(true)}
@@ -104,6 +104,7 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
           aria-expanded={showDropdown}
           role="combobox"
         />
+
         {showDropdown && products.length > 0 && (
           <div
             ref={listRef}
@@ -119,7 +120,7 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
                 className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors ${
                   i === activeIndex ? "bg-accent text-accent-foreground" : "hover:bg-muted"
                 }`}
-                onMouseDown={() => selectProduct(p)}
+                onMouseDown={(e) => { e.preventDefault(); selectProduct(p) }}
                 onMouseEnter={() => setActiveIndex(i)}
               >
                 <Package className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -132,7 +133,10 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
             ))}
           </div>
         )}
+
+        {/* Hidden input untuk productId — dikelola oleh RHF */}
         <input type="hidden" {...register(`items.${index}.productId`)} />
+
         {itemErrors?.productId && (
           <p className="text-xs text-destructive mt-1">{itemErrors.productId.message}</p>
         )}
@@ -144,40 +148,43 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
         )}
       </div>
 
-      {/* Qty */}
+      {/* Qty — pakai register + valueAsNumber, tidak re-render saat field lain berubah */}
       <div>
         <Input
           type="number"
           min={1}
           placeholder="1"
           className="text-sm text-center"
-          value={qty > 0 ? qty : ""}
-          onChange={(e) => {
-            const val = e.target.value === "" ? 1 : parseInt(e.target.value, 10)
-            setValue(`items.${index}.quantity`, isNaN(val) ? 1 : val, { shouldValidate: true })
-          }}
           aria-invalid={!!itemErrors?.quantity}
+          {...register(`items.${index}.quantity`, {
+            valueAsNumber: true,
+            min: { value: 1, message: "Min 1" },
+          })}
         />
         {itemErrors?.quantity && (
           <p className="text-xs text-destructive mt-1">{itemErrors.quantity.message}</p>
         )}
       </div>
 
-      {/* Harga Beli */}
+      {/* Harga Beli — pakai register + valueAsNumber, tapi value dari useWatch agar update saat produk dipilih */}
       <div>
         <div className="relative">
-          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
+          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
+            Rp
+          </span>
           <Input
             type="number"
             min={0}
             placeholder="0"
             className="text-sm pl-7"
-            value={buyPrice > 0 ? buyPrice : ""}
-            onChange={(e) => {
-              const val = e.target.value === "" ? 0 : parseFloat(e.target.value)
-              setValue(`items.${index}.buyPrice`, isNaN(val) ? 0 : val, { shouldValidate: true })
-            }}
             aria-invalid={!!itemErrors?.buyPrice}
+            // Gunakan value dari useWatch agar terupdate saat setValue dipanggil
+            value={Number(buyPrice) || ""}
+            {...register(`items.${index}.buyPrice`, { valueAsNumber: true })}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value)
+              setValue(`items.${index}.buyPrice`, isNaN(val) ? 0 : val, { shouldDirty: true })
+            }}
           />
         </div>
         {itemErrors?.buyPrice && (
@@ -185,7 +192,7 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
         )}
       </div>
 
-      {/* Subtotal */}
+      {/* Subtotal — hanya display, tidak ada input */}
       <div className="flex items-center justify-end h-9">
         <CurrencyDisplay amount={subtotal} className="text-sm font-semibold" />
       </div>

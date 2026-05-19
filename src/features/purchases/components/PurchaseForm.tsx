@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useForm, useFieldArray, FormProvider } from "react-hook-form"
+import { useForm, useFieldArray, FormProvider, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Plus, Loader2, PackagePlus, Truck, CalendarDays, FileText, ShoppingCart } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -48,15 +48,8 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
     },
   })
 
-  const { register, handleSubmit, control, watch, setValue, formState: { errors } } = methods
+  const { register, handleSubmit, control, setValue, formState: { errors } } = methods
   const { fields, append, remove } = useFieldArray({ control, name: "items" })
-
-  const items = watch("items")
-  const totalAmount = items.reduce(
-    (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.buyPrice) || 0),
-    0
-  )
-  const totalItems = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0)
 
   useEffect(() => {
     fetch("/api/vendors?isActive=true")
@@ -182,12 +175,12 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Total Qty</span>
-                  <span className="font-medium">{totalItems} item</span>
+                  <PurchaseTotalQty control={control} />
                 </div>
                 <Separator />
                 <div className="flex justify-between items-center">
                   <span className="font-semibold">Total</span>
-                  <CurrencyDisplay amount={totalAmount} className="text-lg font-bold" />
+                  <PurchaseTotalAmount control={control} />
                 </div>
               </div>
               <Button type="submit" disabled={isSubmitting} className="w-full h-10 gap-2">
@@ -266,11 +259,11 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
               {fields.length > 0 && (
                 <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/20">
                   <span className="text-sm font-semibold text-muted-foreground">
-                    {fields.length} item · {totalItems} qty
+                    {fields.length} jenis produk
                   </span>
                   <div className="flex items-center gap-2">
                     <span className="text-sm text-muted-foreground">Total:</span>
-                    <CurrencyDisplay amount={totalAmount} className="text-base font-bold" />
+                    <PurchaseTotalAmount control={control} />
                   </div>
                 </div>
               )}
@@ -291,4 +284,23 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
       />
     </FormProvider>
   )
+}
+
+// ── Komponen kalkulasi terpisah — pakai useWatch sendiri agar tidak re-render parent ──
+
+import type { Control } from "react-hook-form"
+
+function PurchaseTotalAmount({ control }: { control: Control<CreatePurchaseInput> }) {
+  const items = useWatch({ control, name: "items" })
+  const total = (items ?? []).reduce(
+    (sum, item) => sum + (Number(item?.quantity) || 0) * (Number(item?.buyPrice) || 0),
+    0
+  )
+  return <CurrencyDisplay amount={total} className="text-lg font-bold" />
+}
+
+function PurchaseTotalQty({ control }: { control: Control<CreatePurchaseInput> }) {
+  const items = useWatch({ control, name: "items" })
+  const totalQty = (items ?? []).reduce((s, item) => s + (Number(item?.quantity) || 0), 0)
+  return <span className="font-medium">{totalQty} item</span>
 }
