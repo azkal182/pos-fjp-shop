@@ -1,8 +1,11 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import { SlidersHorizontal } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { PageWrapper } from "@/components/layout/PageWrapper"
 import { StockMovementTable } from "@/features/stock-movements/components/StockMovementTable"
+import { StockAdjustmentForm } from "@/features/stock-movements/components/StockAdjustmentForm"
 import { useDebounce } from "@/hooks/useDebounce"
 import { useToast } from "@/hooks/useToast"
 import type { PaginationMeta } from "@/types"
@@ -23,6 +26,7 @@ export default function StockMovementsPage() {
   const [movements, setMovements] = useState<StockMovement[]>([])
   const [meta, setMeta] = useState<PaginationMeta>({ page: 1, limit: 20, total: 0, totalPages: 0 })
   const [isLoading, setIsLoading] = useState(true)
+  const [isAdjustOpen, setIsAdjustOpen] = useState(false)
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState({
     search: "",
@@ -64,8 +68,21 @@ export default function StockMovementsPage() {
     setFilters((prev) => ({ ...prev, dateFrom: range.from, dateTo: range.to }))
   }
 
+  function handleAdjustSuccess() {
+    toast.success("Penyesuaian stok berhasil disimpan")
+    fetchMovements()
+  }
+
   return (
-    <PageWrapper title="Pergerakan Stok">
+    <PageWrapper
+      title="Pergerakan Stok"
+      actions={
+        <Button onClick={() => setIsAdjustOpen(true)} variant="outline">
+          <SlidersHorizontal className="h-4 w-4 mr-2" />
+          Penyesuaian Stok
+        </Button>
+      }
+    >
       <StockMovementTable
         data={movements}
         meta={meta}
@@ -74,6 +91,12 @@ export default function StockMovementsPage() {
         onFilterChange={setFilter}
         onDateRangeChange={setDateRange}
         onPageChange={setPage}
+      />
+
+      <StockAdjustmentForm
+        open={isAdjustOpen}
+        onOpenChange={setIsAdjustOpen}
+        onSuccess={handleAdjustSuccess}
       />
     </PageWrapper>
   )
