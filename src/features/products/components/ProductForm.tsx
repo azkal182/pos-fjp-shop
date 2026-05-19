@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Info } from "lucide-react"
+import { Info, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -28,6 +28,32 @@ import { createProductSchema, type CreateProductInput } from "../schemas/product
 interface Category {
   id: string
   name: string
+}
+
+const UNIT_OPTIONS = [
+  "pcs",
+  "kg",
+  "gram",
+  "liter",
+  "ml",
+  "box",
+  "karton",
+  "lusin",
+  "pak",
+  "botol",
+  "kaleng",
+  "sachet",
+  "lembar",
+  "meter",
+  "roll",
+]
+
+function generateSKU(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+  const random = Array.from({ length: 6 }, () =>
+    chars.charAt(Math.floor(Math.random() * chars.length))
+  ).join("")
+  return `SKU-${random}`
 }
 
 interface ProductFormProps {
@@ -59,7 +85,7 @@ export function ProductForm({
   } = useForm<CreateProductInput>({
     resolver: zodResolver(createProductSchema),
     defaultValues: {
-      code: "",
+      code: mode === "create" ? generateSKU() : "",
       name: "",
       categoryId: "",
       unit: "",
@@ -73,15 +99,20 @@ export function ProductForm({
   })
 
   const isActive = watch("isActive")
+  const codeValue = watch("code")
 
   useEffect(() => {
     if (open) {
+      // Auto-generate SKU saat form create dibuka
+      if (mode === "create") {
+        setValue("code", generateSKU())
+      }
       fetch("/api/categories")
         .then((r) => r.json())
         .then((json) => setCategories(json.data ?? []))
         .catch(() => {})
     }
-  }, [open])
+  }, [open, mode, setValue])
 
   function handleClose() {
     reset()
@@ -103,47 +134,90 @@ export function ProductForm({
         </DialogHeader>
 
         <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
-          {/* Kode & Nama */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="code">Kode / SKU</Label>
-              <Input id="code" placeholder="PRD-001" {...register("code")} aria-invalid={!!errors.code} />
-              {errors.code && <p className="text-xs text-destructive">{errors.code.message}</p>}
+          {/* Kode SKU */}
+          <div className="space-y-2">
+            <Label htmlFor="code">Kode / SKU</Label>
+            <div className="flex gap-2">
+              <Input
+                id="code"
+                placeholder="SKU-XXXXXX"
+                {...register("code")}
+                aria-invalid={!!errors.code}
+                className="font-mono"
+              />
+              {mode === "create" && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setValue("code", generateSKU())}
+                  title="Generate ulang SKU"
+                  aria-label="Generate ulang SKU"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </Button>
+              )}
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="unit">Satuan</Label>
-              <Input id="unit" placeholder="pcs, kg, box..." {...register("unit")} aria-invalid={!!errors.unit} />
-              {errors.unit && <p className="text-xs text-destructive">{errors.unit.message}</p>}
-            </div>
+            {errors.code && <p className="text-xs text-destructive">{errors.code.message}</p>}
           </div>
 
+          {/* Nama Produk */}
           <div className="space-y-2">
             <Label htmlFor="name">Nama Produk</Label>
-            <Input id="name" placeholder="Nama produk..." {...register("name")} aria-invalid={!!errors.name} />
+            <Input
+              id="name"
+              placeholder="Nama produk..."
+              {...register("name")}
+              aria-invalid={!!errors.name}
+            />
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
 
-          {/* Kategori */}
-          <div className="space-y-2">
-            <Label>Kategori</Label>
-            <Select
-              defaultValue={defaultValues?.categoryId}
-              onValueChange={(val) => setValue("categoryId", val)}
-            >
-              <SelectTrigger aria-invalid={!!errors.categoryId}>
-                <SelectValue placeholder="Pilih kategori..." />
-              </SelectTrigger>
-              <SelectContent>
-                {categories.map((cat) => (
-                  <SelectItem key={cat.id} value={cat.id}>
-                    {cat.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {errors.categoryId && (
-              <p className="text-xs text-destructive">{errors.categoryId.message}</p>
-            )}
+          {/* Kategori & Satuan */}
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Kategori</Label>
+              <Select
+                defaultValue={defaultValues?.categoryId}
+                onValueChange={(val) => setValue("categoryId", val)}
+              >
+                <SelectTrigger aria-invalid={!!errors.categoryId}>
+                  <SelectValue placeholder="Pilih kategori..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {categories.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.categoryId && (
+                <p className="text-xs text-destructive">{errors.categoryId.message}</p>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Satuan</Label>
+              <Select
+                defaultValue={defaultValues?.unit}
+                onValueChange={(val) => setValue("unit", val)}
+              >
+                <SelectTrigger aria-invalid={!!errors.unit}>
+                  <SelectValue placeholder="Pilih satuan..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {UNIT_OPTIONS.map((unit) => (
+                    <SelectItem key={unit} value={unit}>
+                      {unit}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.unit && (
+                <p className="text-xs text-destructive">{errors.unit.message}</p>
+              )}
+            </div>
           </div>
 
           {/* Harga */}
@@ -191,7 +265,7 @@ export function ProductForm({
           {/* Stok info */}
           <div className="flex items-start gap-2 rounded-md bg-muted/50 border px-3 py-2.5 text-sm text-muted-foreground">
             <Info className="h-4 w-4 mt-0.5 shrink-0" />
-            <span>Stok dikelola otomatis melalui Pembelian & Penyesuaian Stok</span>
+            <span>Stok dikelola otomatis melalui Pembelian &amp; Penyesuaian Stok</span>
           </div>
 
           {/* Status Aktif */}
