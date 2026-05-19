@@ -1,7 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Pencil, PowerOff } from "lucide-react"
+import { Pencil, PowerOff, ExternalLink } from "lucide-react"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -90,7 +91,10 @@ export function VendorTable({
       header: "Nama Vendor",
       render: (row) => (
         <div>
-          <p className="font-medium">{row.name}</p>
+          <Link href={`/vendors/${row.id}`} className="font-medium text-sm hover:underline flex items-center gap-1.5">
+            {row.name}
+            <ExternalLink className="h-3 w-3 text-muted-foreground" />
+          </Link>
           <p className="text-xs text-muted-foreground">{row._count.purchases} pembelian</p>
         </div>
       ),
@@ -123,9 +127,14 @@ export function VendorTable({
     },
     {
       header: "Aksi",
-      className: "w-[100px] text-right",
+      className: "w-[120px] text-right",
       render: (row) => (
         <div className="flex items-center justify-end gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+            <Link href={`/vendors/${row.id}`} aria-label="Detail vendor">
+              <ExternalLink className="h-4 w-4" />
+            </Link>
+          </Button>
           <Button
             variant="ghost" size="icon" className="h-8 w-8"
             onClick={() => setEditTarget(row)}

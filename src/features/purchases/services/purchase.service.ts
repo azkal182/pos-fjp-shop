@@ -6,6 +6,7 @@ import { calculatePagination } from "@/lib/api-response"
 import { createMovement } from "@/features/stock-movements/services/stock-movement.service"
 import { updateAfterPurchase } from "@/features/products/services/product-vendor-price.service"
 import { addEntry } from "@/features/ledger/services/ledger.service"
+import { createDeposit } from "@/features/deposits/services/deposit.service"
 import type { CreatePurchaseInput, PriceChange } from "../schemas/purchase.schema"
 
 export interface PurchaseFilter {
@@ -214,6 +215,41 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
         },
       })
       log.info("[PURCHASE]", "Vendor debt created", { code, vendorId: data.vendorId, debtAmount })
+    }
+
+    // 6. Jika overpay → otomatis jadi deposit vendor (DEPOSIT_IN CREDIT)
+    if (overpayAmount > 0) {
+      await addEntry({
+        partyType: "VENDOR",
+        partyId: data.vendorId,
+        type: "DEPOSIT_IN",
+        direction: "CREDIT",
+        amount: overpayAmount,
+        description: `Deposit dari kelebihan bayar PO ${code}`,
+        referenceType: "PURCHASE",
+        referenceId: purchase.id,
+        createdBy: userId,
+        createdAt: new Date(data.purchaseDate),
+      }, tx)
+
+      // Buat Deposit record untuk vendor
+      await tx.deposit.create({
+        data: {
+          partyType: "VENDOR",
+          partyId: data.vendorId,
+          amount: overpayAmount,
+          balance: overpayAmount,
+          source: "OVERPAY_PURCHASE",
+          sourceId: purchase.id,
+          notes: `Kelebihan bayar PO ${code}`,
+        },
+      })
+
+      log.info("[PURCHASE]", "Vendor deposit created from overpay", {
+        code,
+        vendorId: data.vendorId,
+        overpayAmount,
+      })
     }
 
     return purchase

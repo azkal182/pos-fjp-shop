@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 import { useForm, useFieldArray, FormProvider, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Plus, Loader2, PackagePlus, Truck, CalendarDays, FileText, ShoppingCart } from "lucide-react"
+import { Plus, Loader2, PackagePlus, Truck, CalendarDays, FileText, ShoppingCart, Wallet } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -36,6 +36,7 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
   const [priceChanges, setPriceChanges] = useState<PriceChange[]>([])
   const [pendingData, setPendingData] = useState<CreatePurchaseInput | null>(null)
   const [showPriceAlert, setShowPriceAlert] = useState(false)
+  const [vendorDeposit, setVendorDeposit] = useState<number>(0)
 
   const methods = useForm<CreatePurchaseInput>({
     resolver: zodResolver(createPurchaseSchema),
@@ -55,6 +56,7 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
 
   // Watch vendorId untuk pass ke PurchaseItemRow
   const selectedVendorId = watch("vendorId")
+  const paidAmountValue = watch("paidAmount")
 
   useEffect(() => {
     fetch("/api/vendors?isActive=true")
@@ -62,6 +64,15 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
       .then((json) => setVendors(json.data ?? []))
       .catch(() => {})
   }, [])
+
+  // Fetch deposit vendor saat vendor dipilih
+  useEffect(() => {
+    if (!selectedVendorId) { setVendorDeposit(0); return }
+    fetch(`/api/vendors/${selectedVendorId}/deposit`)
+      .then((r) => r.json())
+      .then((json) => setVendorDeposit(json.data?.totalBalance ?? 0))
+      .catch(() => setVendorDeposit(0))
+  }, [selectedVendorId])
 
   async function onSubmit(data: CreatePurchaseInput) {
     setIsSubmitting(true)
@@ -194,6 +205,18 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
               {/* Pembayaran */}
               <div className="space-y-3">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Pembayaran</p>
+
+                {/* Deposit vendor tersedia */}
+                {vendorDeposit > 0 && (
+                  <div className="flex items-center gap-2 rounded-md bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 px-3 py-2">
+                    <Wallet className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">Deposit Vendor</p>
+                      <CurrencyDisplay amount={vendorDeposit} className="text-xs font-bold text-blue-700 dark:text-blue-400" />
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <Label className="text-xs">Metode Bayar</Label>
                   <div className="grid grid-cols-2 gap-1.5">
@@ -222,6 +245,9 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
                   </div>
                   <p className="text-xs text-muted-foreground">Isi jika bayar sebagian — sisa jadi hutang ke vendor</p>
                 </div>
+
+                {/* Preview overpay / hutang */}
+                <PurchasePaymentPreview control={control} />
               </div>
 
               <Button type="submit" disabled={isSubmitting} className="w-full h-10 gap-2">
@@ -348,4 +374,42 @@ function PurchaseTotalQty({ control }: { control: Control<CreatePurchaseInput> }
   const items = useWatch({ control, name: "items" })
   const totalQty = (items ?? []).reduce((s, item) => s + (Number(item?.quantity) || 0), 0)
   return <span className="font-medium">{totalQty} item</span>
+}
+
+/** Preview hutang atau deposit dari nominal bayar */
+function PurchasePaymentPreview({ control }: { control: Control<CreatePurchaseInput> }) {
+  const items = useWatch({ control, name: "items" })
+  const paidAmount = useWatch({ control, name: "paidAmount" })
+
+  const total = (items ?? []).reduce(
+    (sum, item) => sum + (Number(item?.quantity) || 0) * (Number(item?.buyPrice) || 0),
+    0
+  )
+
+  if (!paidAmount || paidAmount <= 0 || total === 0) return null
+
+  const debt = Math.max(0, total - paidAmount)
+  const overpay = Math.max(0, paidAmount - total)
+
+  if (debt === 0 && overpay === 0) return null
+
+  return (
+    <div className="rounded-md border p-2.5 space-y-1.5 text-xs">
+      {debt > 0 && (
+        <div className="flex justify-between text-red-600 font-medium">
+          <span>Hutang ke vendor</span>
+          <CurrencyDisplay amount={debt} className="text-xs font-semibold" />
+        </div>
+      )}
+      {overpay > 0 && (
+        <div className="flex justify-between text-blue-600 font-medium">
+          <span className="flex items-center gap-1">
+            <Wallet className="h-3 w-3" />
+            Kelebihan → deposit vendor
+          </span>
+          <CurrencyDisplay amount={overpay} className="text-xs font-semibold" />
+        </div>
+      )}
+    </div>
+  )
 }
