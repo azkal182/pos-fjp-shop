@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect } from "react"
 import { usePathname } from "next/navigation"
 import { SidebarInset, SidebarProvider, useSidebar } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/layout/Sidebar"
@@ -11,10 +12,9 @@ function SidebarAutoClose({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const { setOpenMobile, isMobile } = useSidebar()
 
-  // Close mobile sidebar saat pathname berubah
-  if (isMobile) {
-    setOpenMobile(false)
-  }
+  useEffect(() => {
+    if (isMobile) setOpenMobile(false)
+  }, [pathname, isMobile, setOpenMobile])
 
   return <>{children}</>
 }
