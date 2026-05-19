@@ -49,7 +49,7 @@ export function useProducts() {
     } finally {
       setIsLoading(false)
     }
-  }, [debouncedSearch, filters.categoryId, filters.isActive, page])
+  }, [debouncedSearch, filters.categoryId, filters.isActive, filters.vendorId, page])
 
   useEffect(() => {
     fetchProducts()
