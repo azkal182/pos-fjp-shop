@@ -5,9 +5,11 @@ import { useParams, useRouter } from "next/navigation"
 import { ArrowLeft, ExternalLink } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageWrapper } from "@/components/layout/PageWrapper"
 import { DebtTable } from "@/features/debts/components/DebtTable"
 import { CustomerDebtSummary } from "@/features/customers/components/CustomerDebtSummary"
+import { CustomerLedger } from "@/features/debts/components/CustomerLedger"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
 import { useToast } from "@/hooks/useToast"
 import type { PaginationMeta } from "@/types"
@@ -43,8 +45,8 @@ export default function CustomerDebtsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState({ search: "", status: "" })
+  const [ledgerRefreshKey, setLedgerRefreshKey] = useState(0)
 
-  // Fetch customer info
   useEffect(() => {
     fetch(`/api/customers/${customerId}`)
       .then((r) => r.json())
@@ -55,11 +57,11 @@ export default function CustomerDebtsPage() {
   const fetchDebts = useCallback(async () => {
     setIsLoading(true)
     try {
-      const params = new URLSearchParams()
-      params.set("customerId", customerId)
-      params.set("page", String(page))
-      if (filters.status) params.set("status", filters.status)
-      const res = await fetch(`/api/debts?${params}`)
+      const p = new URLSearchParams()
+      p.set("customerId", customerId)
+      p.set("page", String(page))
+      if (filters.status) p.set("status", filters.status)
+      const res = await fetch(`/api/debts?${p}`)
       const json = await res.json()
       setDebts(json.data ?? [])
       setMeta(json.meta)
@@ -77,6 +79,11 @@ export default function CustomerDebtsPage() {
     setFilters((prev) => ({ ...prev, [key]: value }))
   }
 
+  function handlePaymentSuccess() {
+    fetchDebts()
+    setLedgerRefreshKey((k) => k + 1)
+  }
+
   if (!customer) return <LoadingSpinner centered />
 
   return (
@@ -90,7 +97,7 @@ export default function CustomerDebtsPage() {
       }
     >
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Sidebar info */}
+        {/* Sidebar */}
         <div className="space-y-4">
           <div className="rounded-lg border bg-card p-4 space-y-2">
             <div className="flex items-center justify-between">
@@ -111,18 +118,33 @@ export default function CustomerDebtsPage() {
           <CustomerDebtSummary customerId={customerId} />
         </div>
 
-        {/* Debt table */}
+        {/* Main content */}
         <div className="lg:col-span-2">
-          <DebtTable
-            data={debts}
-            meta={meta}
-            isLoading={isLoading}
-            isGlobal={false}
-            filters={filters}
-            onFilterChange={setFilter}
-            onPageChange={setPage}
-            onRefetch={fetchDebts}
-          />
+          <Tabs defaultValue="ledger">
+            <TabsList className="w-full">
+              <TabsTrigger value="ledger" className="flex-1">Buku Hutang</TabsTrigger>
+              <TabsTrigger value="debts" className="flex-1">Per Transaksi</TabsTrigger>
+            </TabsList>
+
+            {/* Tab Buku Hutang — tampilan kredit/debit */}
+            <TabsContent value="ledger" className="mt-4">
+              <CustomerLedger customerId={customerId} refreshKey={ledgerRefreshKey} />
+            </TabsContent>
+
+            {/* Tab Per Transaksi — detail hutang per TRX */}
+            <TabsContent value="debts" className="mt-4">
+              <DebtTable
+                data={debts}
+                meta={meta}
+                isLoading={isLoading}
+                isGlobal={false}
+                filters={filters}
+                onFilterChange={setFilter}
+                onPageChange={setPage}
+                onRefetch={handlePaymentSuccess}
+              />
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
     </PageWrapper>

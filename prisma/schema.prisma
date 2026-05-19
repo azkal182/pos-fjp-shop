@@ -217,6 +217,7 @@ model Customer {
 
   transactions Transaction[]
   debts        Debt[]
+  payments     CustomerPayment[]
 
   @@map("customers")
 }
@@ -248,6 +249,7 @@ model Transaction {
   items          TransactionItem[]
   debt           Debt?
   stockMovements StockMovement[]
+  customerPayments CustomerPayment[]
 
   @@map("transactions")
 }
@@ -311,15 +313,19 @@ enum DebtStatus {
 }
 
 model DebtPayment {
-  id                  String        @id @default(cuid())
+  id                  String           @id @default(cuid())
   debtId              String
-  debt                Debt          @relation(fields: [debtId], references: [id])
-  amount              Decimal       @db.Decimal(15, 2)
-  paymentDate         DateTime      @default(now())
+  debt                Debt             @relation(fields: [debtId], references: [id])
+  amount              Decimal          @db.Decimal(15, 2)
+  paymentDate         DateTime         @default(now())
   source              PaymentSource
   notes               String?
   sourceTransactionId String?
-  createdAt           DateTime      @default(now())
+  createdAt           DateTime         @default(now())
+
+  // Link ke header pembayaran customer
+  customerPaymentId   String?
+  customerPayment     CustomerPayment? @relation(fields: [customerPaymentId], references: [id])
 
   @@map("debt_payments")
 }
@@ -327,6 +333,31 @@ model DebtPayment {
 enum PaymentSource {
   DIRECT
   POS_OVERPAYMENT
+}
+
+// ─────────────────────────────────────────────
+// CUSTOMER PAYMENT (Header pembayaran per event)
+// ─────────────────────────────────────────────
+
+model CustomerPayment {
+  id                  String        @id @default(cuid())
+  customerId          String
+  customer            Customer      @relation(fields: [customerId], references: [id])
+  amount              Decimal       @db.Decimal(15, 2)  // total yang diterima
+  paymentDate         DateTime      @default(now())
+  source              PaymentSource
+  notes               String?
+
+  // Jika dari POS overpay
+  sourceTransactionId String?
+  sourceTransaction   Transaction?  @relation(fields: [sourceTransactionId], references: [id])
+
+  // Detail alokasi ke hutang-hutang
+  allocations         DebtPayment[]
+
+  createdAt           DateTime      @default(now())
+
+  @@map("customer_payments")
 }
 
 // ─────────────────────────────────────────────

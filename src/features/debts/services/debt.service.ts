@@ -65,7 +65,7 @@ export async function allocatePaymentFifo(
   sourceTransactionId?: string,
   notes?: string,
   tx?: TxClient
-): Promise<AllocationResult> {
+): Promise<AllocationResult & { customerPaymentId: string }> {
   const db = tx ?? globalPrisma
 
   const debts = await db.debt.findMany({
@@ -74,15 +74,30 @@ export async function allocatePaymentFifo(
     include: { transaction: { select: { code: true } } },
   })
 
-  let remaining = totalPayment
-  const allocations: DebtAllocation[] = []
+  const source = sourceTransactionId ? "POS_OVERPAYMENT" : "DIRECT"
 
   log.info("[DEBT]", "FIFO allocation started", {
     customerId,
     totalPayment,
+    source,
     debtsCount: debts.length,
   })
 
+  // 1. Buat CustomerPayment header — 1 record per event bayar
+  const customerPayment = await db.customerPayment.create({
+    data: {
+      customerId,
+      amount: totalPayment,
+      source,
+      notes: notes ?? null,
+      sourceTransactionId: sourceTransactionId ?? null,
+    },
+  })
+
+  let remaining = totalPayment
+  const allocations: DebtAllocation[] = []
+
+  // 2. Alokasi FIFO ke hutang-hutang
   for (const debt of debts) {
     if (remaining <= 0) break
 
@@ -101,14 +116,15 @@ export async function allocatePaymentFifo(
       remainingAfter: willBeFullyPaid ? 0 : currentRemaining - allocatedAmount,
     })
 
-    // Buat DebtPayment record
+    // Buat DebtPayment — linked ke CustomerPayment header
     await db.debtPayment.create({
       data: {
         debtId: debt.id,
         amount: allocatedAmount,
-        source: sourceTransactionId ? "POS_OVERPAYMENT" : "DIRECT",
+        source,
         sourceTransactionId: sourceTransactionId ?? null,
         notes: notes ?? null,
+        customerPaymentId: customerPayment.id,
       },
     })
 
@@ -128,6 +144,7 @@ export async function allocatePaymentFifo(
       debtCode: debt.transaction.code,
       allocatedAmount,
       willBeFullyPaid,
+      customerPaymentId: customerPayment.id,
     })
 
     remaining -= allocatedAmount
@@ -137,5 +154,122 @@ export async function allocatePaymentFifo(
     allocations,
     totalAllocated: totalPayment - remaining,
     remainingChange: remaining,
+    customerPaymentId: customerPayment.id,
+  }
+}
+
+// ─── Query helpers ────────────────────────────────────────────────────────────
+
+export async function getCustomerPayments(customerId: string) {
+  return globalPrisma.customerPayment.findMany({
+    where: { customerId },
+    include: {
+      allocations: {
+        include: {
+          debt: {
+            select: {
+              id: true,
+              originalAmount: true,
+              remainingAmount: true,
+              status: true,
+              transaction: { select: { code: true } },
+            },
+          },
+        },
+      },
+      sourceTransaction: { select: { code: true } },
+    },
+    orderBy: { paymentDate: "desc" },
+  })
+}
+
+export async function getCustomerLedger(customerId: string) {
+  // Ambil semua hutang dan semua pembayaran, gabungkan jadi ledger
+  const [debts, payments] = await Promise.all([
+    globalPrisma.debt.findMany({
+      where: { customerId },
+      include: { transaction: { select: { code: true, transactionDate: true } } },
+      orderBy: { debtDate: "asc" },
+    }),
+    globalPrisma.customerPayment.findMany({
+      where: { customerId },
+      include: {
+        allocations: {
+          include: {
+            debt: { select: { transaction: { select: { code: true } } } },
+          },
+        },
+        sourceTransaction: { select: { code: true } },
+      },
+      orderBy: { paymentDate: "asc" },
+    }),
+  ])
+
+  type LedgerEntry = {
+    date: Date
+    type: "DEBT" | "PAYMENT"
+    description: string
+    debit: number    // hutang masuk (+)
+    credit: number   // pembayaran (-)
+    reference: string
+    id: string
+    meta?: any
+  }
+
+  const entries: LedgerEntry[] = []
+
+  // Hutang = debit (menambah saldo hutang)
+  for (const debt of debts) {
+    entries.push({
+      date: debt.debtDate,
+      type: "DEBT",
+      description: `Hutang dari transaksi ${debt.transaction.code}`,
+      debit: Number(debt.originalAmount),
+      credit: 0,
+      reference: debt.transaction.code,
+      id: debt.id,
+    })
+  }
+
+  // Pembayaran = kredit (mengurangi saldo hutang)
+  for (const payment of payments) {
+    const sourceLabel =
+      payment.source === "POS_OVERPAYMENT"
+        ? `Overpay POS ${payment.sourceTransaction?.code ?? ""}`
+        : "Pembayaran langsung"
+
+    entries.push({
+      date: payment.paymentDate,
+      type: "PAYMENT",
+      description: sourceLabel,
+      debit: 0,
+      credit: Number(payment.amount),
+      reference: payment.id,
+      id: payment.id,
+      meta: {
+        notes: payment.notes,
+        allocations: payment.allocations.map((a) => ({
+          debtCode: a.debt.transaction.code,
+          amount: Number(a.amount),
+        })),
+      },
+    })
+  }
+
+  // Sort by date asc
+  entries.sort((a, b) => a.date.getTime() - b.date.getTime())
+
+  // Hitung running balance
+  let balance = 0
+  const ledger = entries.map((entry) => {
+    balance += entry.debit - entry.credit
+    return { ...entry, balance }
+  })
+
+  return {
+    ledger,
+    totalDebt: debts.reduce((s, d) => s + Number(d.originalAmount), 0),
+    totalPaid: payments.reduce((s, p) => s + Number(p.amount), 0),
+    currentBalance: balance,
   }
 }

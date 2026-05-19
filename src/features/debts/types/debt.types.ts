@@ -13,6 +13,7 @@ export interface AllocationResult {
   allocations: DebtAllocation[]
   totalAllocated: number
   remainingChange: number
+  customerPaymentId: string
 }
 
 export interface FifoPreview {
