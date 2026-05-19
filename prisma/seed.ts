@@ -42,6 +42,14 @@ async function main() {
 
     // ── 0. Reset data bisnis (bukan auth) ────────────────────────────────────────
     console.log("🧹 Cleaning existing business data...")
+    await prisma.depositUsage.deleteMany()
+    await prisma.deposit.deleteMany()
+    await prisma.ledgerEntry.deleteMany()
+    await prisma.ledgerAccount.deleteMany()
+    await prisma.vendorDebtPayment.deleteMany()
+    await prisma.vendorPayment.deleteMany()
+    await prisma.vendorDebt.deleteMany()
+    await prisma.productVendorPrice.deleteMany()
     await prisma.customerPayment.deleteMany()
     await prisma.debtPayment.deleteMany()
     await prisma.debt.deleteMany()
@@ -634,6 +642,156 @@ async function main() {
         })
     }, { maxWait: 20000, timeout:20000 })
     console.log("✅ Stock adjustments (rusak, hilang, opname)")
+
+    // ── Backfill LedgerAccount + LedgerEntry ─────────────────────────────────────
+    const seedAdminUser = await prisma.user.findFirst({ orderBy: { createdAt: "asc" } })
+    const seedAdminId = seedAdminUser?.id ?? "system"
+
+    // Buat LedgerAccount untuk semua customer dan vendor
+    const allCustomers = await prisma.customer.findMany({ select: { id: true } })
+    const allVendors = await prisma.vendor.findMany({ select: { id: true } })
+    for (const c of allCustomers) {
+        await prisma.ledgerAccount.upsert({
+            where: { partyType_partyId: { partyType: "CUSTOMER", partyId: c.id } },
+            update: {},
+            create: { partyType: "CUSTOMER", partyId: c.id },
+        })
+    }
+    for (const v of allVendors) {
+        await prisma.ledgerAccount.upsert({
+            where: { partyType_partyId: { partyType: "VENDOR", partyId: v.id } },
+            update: {},
+            create: { partyType: "VENDOR", partyId: v.id },
+        })
+    }
+
+    // Backfill LedgerEntry dari Purchase (vendor)
+    const allPurchases = await prisma.purchase.findMany({
+        orderBy: { purchaseDate: "asc" },
+        include: { vendorDebt: true },
+    })
+    const vendorBalances: Record<string, number> = {}
+    for (const po of allPurchases) {
+        const acc = await prisma.ledgerAccount.findUnique({
+            where: { partyType_partyId: { partyType: "VENDOR", partyId: po.vendorId } },
+        })
+        if (!acc) continue
+        const currentBalance = vendorBalances[po.vendorId] ?? 0
+
+        // INVOICE DEBIT
+        const balanceAfterInvoice = currentBalance + Number(po.totalAmount)
+        await prisma.ledgerEntry.create({
+            data: {
+                accountId: acc.id, type: "INVOICE", direction: "DEBIT",
+                amount: Number(po.totalAmount), runningBalance: balanceAfterInvoice,
+                description: `PO ${po.code}`, referenceType: "PURCHASE", referenceId: po.id,
+                createdBy: seedAdminId, createdAt: po.purchaseDate,
+            },
+        })
+
+        // PAYMENT_OUT CREDIT (hanya jika ada pembayaran)
+        let balanceAfterPayment = balanceAfterInvoice
+        const paidAmount = Number(po.paidAmount)
+        if (paidAmount > 0) {
+            balanceAfterPayment = balanceAfterInvoice - paidAmount
+            await prisma.ledgerEntry.create({
+                data: {
+                    accountId: acc.id, type: "PAYMENT_OUT", direction: "CREDIT",
+                    amount: paidAmount, runningBalance: balanceAfterPayment,
+                    description: `Bayar PO ${po.code}`, paymentMethod: po.paymentMethod,
+                    referenceType: "PURCHASE", referenceId: po.id,
+                    createdBy: seedAdminId, createdAt: po.purchaseDate,
+                },
+            })
+        }
+
+        // DEPOSIT_IN jika overpay
+        const overpay = Number(po.changeAmount)
+        if (overpay > 0) {
+            const balanceAfterDeposit = balanceAfterPayment - overpay
+            await prisma.ledgerEntry.create({
+                data: {
+                    accountId: acc.id, type: "DEPOSIT_IN", direction: "CREDIT",
+                    amount: overpay, runningBalance: balanceAfterDeposit,
+                    description: `Deposit dari kelebihan bayar PO ${po.code}`,
+                    referenceType: "PURCHASE", referenceId: po.id,
+                    createdBy: seedAdminId, createdAt: po.purchaseDate,
+                },
+            })
+            await prisma.deposit.create({
+                data: {
+                    partyType: "VENDOR", partyId: po.vendorId,
+                    amount: overpay, balance: overpay,
+                    source: "OVERPAY_PURCHASE", sourceId: po.id,
+                },
+            })
+            vendorBalances[po.vendorId] = balanceAfterDeposit
+        } else {
+            vendorBalances[po.vendorId] = balanceAfterPayment
+        }
+    }
+
+    // Backfill LedgerEntry dari Transaction (customer)
+    const allTransactions = await prisma.transaction.findMany({
+        where: { customerId: { not: null } },
+        orderBy: { transactionDate: "asc" },
+    })
+    const customerBalances: Record<string, number> = {}
+    for (const trx of allTransactions) {
+        if (!trx.customerId) continue
+        const acc = await prisma.ledgerAccount.findUnique({
+            where: { partyType_partyId: { partyType: "CUSTOMER", partyId: trx.customerId } },
+        })
+        if (!acc) continue
+        const currentBalance = customerBalances[trx.customerId] ?? 0
+
+        const balanceAfterInvoice = currentBalance + Number(trx.totalAmount)
+        await prisma.ledgerEntry.create({
+            data: {
+                accountId: acc.id, type: "INVOICE", direction: "DEBIT",
+                amount: Number(trx.totalAmount), runningBalance: balanceAfterInvoice,
+                description: `Penjualan ${trx.code}`, referenceType: "TRANSACTION", referenceId: trx.id,
+                createdBy: seedAdminId, createdAt: trx.transactionDate,
+            },
+        })
+
+        let balanceAfterPayment = balanceAfterInvoice
+        if (Number(trx.paidAmount) > 0) {
+            balanceAfterPayment = balanceAfterInvoice - Number(trx.paidAmount)
+            await prisma.ledgerEntry.create({
+                data: {
+                    accountId: acc.id, type: "PAYMENT_IN", direction: "CREDIT",
+                    amount: Number(trx.paidAmount), runningBalance: balanceAfterPayment,
+                    description: `Bayar ${trx.code}`, paymentMethod: trx.paymentMethod,
+                    referenceType: "TRANSACTION", referenceId: trx.id,
+                    createdBy: seedAdminId, createdAt: trx.transactionDate,
+                },
+            })
+        }
+        customerBalances[trx.customerId] = balanceAfterPayment
+    }
+
+    // Backfill ProductVendorPrice
+    const purchaseItems = await prisma.purchaseItem.findMany({
+        include: { purchase: { select: { vendorId: true, purchaseDate: true } } },
+        orderBy: { createdAt: "asc" },
+    })
+    const pvpMap = new Map<string, { buyPrice: number; lastOrderAt: Date; vendorId: string; productId: string }>()
+    for (const item of purchaseItems) {
+        const key = `${item.productId}-${item.purchase.vendorId}`
+        pvpMap.set(key, { buyPrice: Number(item.buyPrice), lastOrderAt: item.purchase.purchaseDate, vendorId: item.purchase.vendorId, productId: item.productId })
+    }
+    for (const [, data] of pvpMap) {
+        await prisma.productVendorPrice.upsert({
+            where: { productId_vendorId: { productId: data.productId, vendorId: data.vendorId } },
+            update: { buyPrice: data.buyPrice, lastOrderAt: data.lastOrderAt },
+            create: { productId: data.productId, vendorId: data.vendorId, buyPrice: data.buyPrice, lastOrderAt: data.lastOrderAt, isPreferred: false },
+        })
+    }
+
+    const ledgerCount = await prisma.ledgerEntry.count()
+    const pvpCount = await prisma.productVendorPrice.count()
+    console.log(`✅ ${ledgerCount} LedgerEntry + ${pvpCount} ProductVendorPrice`)
 
     // ── Summary ──────────────────────────────────────────────────────────────────
     const [trxCount, debtCount, productCount, customerCount] = await Promise.all([
