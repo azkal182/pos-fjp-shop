@@ -110,6 +110,7 @@ model Product {
   stockMovements   StockMovement[]
   transactionItems TransactionItem[]
   purchaseItems    PurchaseItem[]
+  vendorPrices     ProductVendorPrice[]
 
   @@map("products")
 }
@@ -127,7 +128,10 @@ model Vendor {
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 
-  purchases Purchase[]
+  purchases      Purchase[]
+  vendorDebts    VendorDebt[]
+  vendorPayments VendorPayment[]
+  productPrices  ProductVendorPrice[]
 
   @@map("vendors")
 }
@@ -137,20 +141,26 @@ model Vendor {
 // ─────────────────────────────────────────────
 
 model Purchase {
-  id           String     @id @default(cuid())
-  code         String     @unique
-  vendorId     String
-  vendor       Vendor     @relation(fields: [vendorId], references: [id])
-  userId       String
-  user         User       @relation(fields: [userId], references: [id])
-  totalAmount  Decimal    @db.Decimal(15, 2)
-  notes        String?
-  purchaseDate DateTime   @default(now())
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id            String        @id @default(cuid())
+  code          String        @unique
+  vendorId      String
+  vendor        Vendor        @relation(fields: [vendorId], references: [id])
+  userId        String
+  user          User          @relation(fields: [userId], references: [id])
+  totalAmount   Decimal       @db.Decimal(15, 2)
+  paidAmount    Decimal       @db.Decimal(15, 2) @default(0)
+  changeAmount  Decimal       @db.Decimal(15, 2) @default(0)
+  debtAmount    Decimal       @db.Decimal(15, 2) @default(0)
+  paymentStatus PaymentStatus @default(PAID)
+  paymentMethod PaymentMethod @default(CASH)
+  notes         String?
+  purchaseDate  DateTime      @default(now())
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
 
   items          PurchaseItem[]
   stockMovements StockMovement[]
+  vendorDebt     VendorDebt?
 
   @@map("purchases")
 }
@@ -218,6 +228,7 @@ model Customer {
   transactions Transaction[]
   debts        Debt[]
   payments     CustomerPayment[]
+  deposits     Deposit[]
 
   @@map("customers")
 }
@@ -239,6 +250,8 @@ model Transaction {
   paidAmount      Decimal       @db.Decimal(15, 2)
   changeAmount    Decimal       @db.Decimal(15, 2) @default(0)
   debtAmount      Decimal       @db.Decimal(15, 2) @default(0)
+  depositUsed     Decimal       @db.Decimal(15, 2) @default(0)
+  depositCreated  Decimal       @db.Decimal(15, 2) @default(0)
   paymentMethod   PaymentMethod
   paymentStatus   PaymentStatus
   notes           String?
@@ -246,9 +259,9 @@ model Transaction {
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
 
-  items          TransactionItem[]
-  debt           Debt?
-  stockMovements StockMovement[]
+  items            TransactionItem[]
+  debt             Debt?
+  stockMovements   StockMovement[]
   customerPayments CustomerPayment[]
 
   @@map("transactions")
@@ -398,3 +411,179 @@ enum SettingGroup {
   POS
   REPORT
 }
+
+// ─────────────────────────────────────────────
+// PRODUCT VENDOR PRICE (Multi-vendor per produk)
+// ─────────────────────────────────────────────
+
+model ProductVendorPrice {
+  id          String   @id @default(cuid())
+  productId   String
+  product     Product  @relation(fields: [productId], references: [id])
+  vendorId    String
+  vendor      Vendor   @relation(fields: [vendorId], references: [id])
+  buyPrice    Decimal  @db.Decimal(15, 2)
+  isPreferred Boolean  @default(false)
+  lastOrderAt DateTime?
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([productId, vendorId])
+  @@map("product_vendor_prices")
+}
+
+// ─────────────────────────────────────────────
+// VENDOR DEBT (Hutang toko ke vendor)
+// ─────────────────────────────────────────────
+
+model VendorDebt {
+  id              String      @id @default(cuid())
+  vendorId        String
+  vendor          Vendor      @relation(fields: [vendorId], references: [id])
+  purchaseId      String      @unique
+  purchase        Purchase    @relation(fields: [purchaseId], references: [id])
+  originalAmount  Decimal     @db.Decimal(15, 2)
+  paidAmount      Decimal     @db.Decimal(15, 2) @default(0)
+  remainingAmount Decimal     @db.Decimal(15, 2)
+  status          DebtStatus  @default(UNPAID)
+  debtDate        DateTime    @default(now())
+  settledAt       DateTime?
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  payments VendorDebtPayment[]
+
+  @@map("vendor_debts")
+}
+
+model VendorDebtPayment {
+  id              String         @id @default(cuid())
+  debtId          String
+  debt            VendorDebt     @relation(fields: [debtId], references: [id])
+  amount          Decimal        @db.Decimal(15, 2)
+  paymentDate     DateTime       @default(now())
+  source          PaymentSource
+  notes           String?
+  vendorPaymentId String?
+  vendorPayment   VendorPayment? @relation(fields: [vendorPaymentId], references: [id])
+  createdAt       DateTime       @default(now())
+
+  @@map("vendor_debt_payments")
+}
+
+model VendorPayment {
+  id            String              @id @default(cuid())
+  vendorId      String
+  vendor        Vendor              @relation(fields: [vendorId], references: [id])
+  amount        Decimal             @db.Decimal(15, 2)
+  paymentDate   DateTime            @default(now())
+  source        PaymentSource
+  paymentMethod PaymentMethod
+  notes         String?
+  createdAt     DateTime            @default(now())
+
+  allocations VendorDebtPayment[]
+
+  @@map("vendor_payments")
+}
+
+// ─────────────────────────────────────────────
+// DEPOSIT (Customer & Vendor)
+// ─────────────────────────────────────────────
+
+enum PartyType {
+  CUSTOMER
+  VENDOR
+}
+
+enum DepositSource {
+  OVERPAY_TRANSACTION
+  OVERPAY_PURCHASE
+  MANUAL
+}
+
+model Deposit {
+  id             String        @id @default(cuid())
+  partyType      PartyType
+  partyId        String
+  amount         Decimal       @db.Decimal(15, 2)
+  usedAmount     Decimal       @db.Decimal(15, 2) @default(0)
+  returnedAmount Decimal       @db.Decimal(15, 2) @default(0)
+  balance        Decimal       @db.Decimal(15, 2)
+  source         DepositSource
+  sourceId       String?
+  notes          String?
+  createdAt      DateTime      @default(now())
+
+  usages   DepositUsage[]
+  customer Customer?     @relation(fields: [partyId], references: [id], map: "deposit_customer_fk")
+
+  @@index([partyType, partyId])
+  @@map("deposits")
+}
+
+model DepositUsage {
+  id          String   @id @default(cuid())
+  depositId   String
+  deposit     Deposit  @relation(fields: [depositId], references: [id])
+  amount      Decimal  @db.Decimal(15, 2)
+  usageType   String   // "PAYMENT" | "RETURN"
+  referenceId String?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@map("deposit_usages")
+}
+
+// ─────────────────────────────────────────────
+// LEDGER (Buku besar terpusat)
+// ─────────────────────────────────────────────
+
+enum LedgerEntryType {
+  INVOICE
+  PAYMENT_IN
+  PAYMENT_OUT
+  DEPOSIT_IN
+  DEPOSIT_OUT
+  DEPOSIT_RETURN
+  ADJUSTMENT
+}
+
+enum EntryDirection {
+  DEBIT
+  CREDIT
+}
+
+model LedgerAccount {
+  id        String    @id @default(cuid())
+  partyType PartyType
+  partyId   String
+  createdAt DateTime  @default(now())
+
+  entries LedgerEntry[]
+
+  @@unique([partyType, partyId])
+  @@map("ledger_accounts")
+}
+
+model LedgerEntry {
+  id             String          @id @default(cuid())
+  accountId      String
+  account        LedgerAccount   @relation(fields: [accountId], references: [id])
+  type           LedgerEntryType
+  direction      EntryDirection
+  amount         Decimal         @db.Decimal(15, 2)
+  runningBalance Decimal         @db.Decimal(15, 2)
+  description    String
+  paymentMethod  PaymentMethod?
+  referenceType  String?
+  referenceId    String?
+  notes          String?
+  createdAt      DateTime        @default(now())
+  createdBy      String
+
+  @@index([accountId, createdAt])
+  @@map("ledger_entries")
+}
+
