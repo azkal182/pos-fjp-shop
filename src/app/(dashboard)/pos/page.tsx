@@ -1,9 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { ShoppingCart } from "lucide-react"
+import { CreditCard, ShoppingBag } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import {
   Dialog,
@@ -12,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { EmptyState } from "@/components/shared/EmptyState"
+import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { ProductSearch } from "@/features/pos/components/ProductSearch"
 import { CartItem } from "@/features/pos/components/CartItem"
 import { CartSummary } from "@/features/pos/components/CartSummary"
@@ -48,7 +48,7 @@ export default function POSPage() {
   const toast = useToast()
   const {
     items, customerId, paymentMethod, paidAmount,
-    totalAmount, discountAmount, isWalkIn, debtAmount,
+    totalAmount, discountAmount,
   } = useCartStore()
 
   const [isPaymentOpen, setIsPaymentOpen] = useState(false)
@@ -57,8 +57,6 @@ export default function POSPage() {
   const [isReceiptOpen, setIsReceiptOpen] = useState(false)
 
   const total = totalAmount()
-  const walkIn = isWalkIn()
-  const debt = debtAmount()
   const cartEmpty = items.length === 0
 
   async function handleCheckout() {
@@ -74,8 +72,7 @@ export default function POSPage() {
         })),
         paidAmount,
         paymentMethod,
-        discountAmount: discountAmount,
-        notes: undefined,
+        discountAmount,
       }
 
       const res = await fetch("/api/transactions", {
@@ -98,70 +95,85 @@ export default function POSPage() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-57px)] overflow-hidden">
-      {/* Kolom kiri — Produk & Cart */}
-      <div className="flex-1 flex flex-col overflow-hidden border-r">
-        {/* Search */}
-        <div className="p-4 border-b">
+    <div className="flex h-[calc(100vh-57px)] overflow-hidden bg-muted/20">
+      {/* ── Kolom kiri: Search + Cart ── */}
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Search bar */}
+        <div className="bg-background border-b px-4 py-3">
           <ProductSearch />
         </div>
 
         {/* Cart items */}
-        <div className="flex-1 overflow-y-auto p-4">
-          {items.length === 0 ? (
-            <EmptyState
-              title="Keranjang kosong"
-              description="Cari dan tambahkan produk di atas"
-            />
+        <div className="flex-1 overflow-y-auto">
+          {cartEmpty ? (
+            <div className="flex items-center justify-center h-full">
+              <EmptyState
+                title="Keranjang kosong"
+                description="Cari produk di atas untuk mulai transaksi"
+              />
+            </div>
           ) : (
-            <div>
+            <div className="divide-y">
               {items.map((item) => (
                 <CartItem key={item.productId} item={item} />
               ))}
             </div>
           )}
         </div>
+
+        {/* Footer kiri: jumlah item */}
+        {!cartEmpty && (
+          <div className="bg-background border-t px-4 py-2">
+            <p className="text-xs text-muted-foreground">
+              {items.length} jenis produk · {items.reduce((s, i) => s + i.quantity, 0)} item
+            </p>
+          </div>
+        )}
       </div>
 
-      {/* Kolom kanan — Customer, Summary, Bayar */}
-      <div className="w-80 flex flex-col bg-muted/10">
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {/* Customer */}
-          <Card>
-            <CardHeader className="pb-2 pt-3 px-3">
-              <CardTitle className="text-sm">Customer</CardTitle>
-            </CardHeader>
-            <CardContent className="px-3 pb-3">
-              <CustomerSelect />
-            </CardContent>
-          </Card>
-
-          {/* Summary */}
-          <Card>
-            <CardHeader className="pb-2 pt-3 px-3">
-              <CardTitle className="text-sm">Ringkasan</CardTitle>
-            </CardHeader>
-            <CardContent className="px-3 pb-3">
-              <CartSummary />
-            </CardContent>
-          </Card>
+      {/* ── Kolom kanan: Panel kasir ── */}
+      <div className="w-[320px] flex flex-col bg-background border-l">
+        {/* Header panel */}
+        <div className="px-4 py-3 border-b">
+          <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Panel Kasir</h2>
         </div>
 
-        {/* Tombol Bayar */}
-        <div className="p-4 border-t bg-background">
+        {/* Scrollable content */}
+        <div className="flex-1 overflow-y-auto overflow-x-visible px-4 py-4 space-y-5">
+          {/* Customer */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">Customer</p>
+            <CustomerSelect />
+          </div>
+
+          <Separator />
+
+          {/* Summary */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-3">Ringkasan</p>
+            <CartSummary />
+          </div>
+        </div>
+
+        {/* Footer: Tombol Bayar */}
+        <div className="border-t bg-background p-4 space-y-3">
+          {/* Total besar */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-muted-foreground">Total Tagihan</span>
+            <CurrencyDisplay
+              amount={total}
+              className={`text-xl font-bold ${cartEmpty ? "text-muted-foreground" : "text-foreground"}`}
+            />
+          </div>
+
           <Button
-            className="w-full h-12 text-base font-semibold"
-            disabled={cartEmpty || (walkIn && debt > 0)}
+            className="w-full h-11 text-sm font-semibold gap-2"
+            disabled={cartEmpty}
             onClick={() => setIsPaymentOpen(true)}
           >
-            <ShoppingCart className="h-5 w-5 mr-2" />
-            Bayar{!cartEmpty && ` — Rp ${total.toLocaleString("id-ID")}`}
+            <CreditCard className="h-4 w-4" />
+            Proses Pembayaran
           </Button>
-          {walkIn && debt > 0 && (
-            <p className="text-xs text-destructive text-center mt-1">
-              Walk-in harus bayar lunas
-            </p>
-          )}
         </div>
       </div>
 
@@ -177,7 +189,10 @@ export default function POSPage() {
       <Dialog open={isReceiptOpen} onOpenChange={setIsReceiptOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Struk Transaksi</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <ShoppingBag className="h-4 w-4" />
+              Struk Transaksi
+            </DialogTitle>
           </DialogHeader>
           {lastTransaction && (
             <Receipt
