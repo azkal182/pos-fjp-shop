@@ -16,20 +16,17 @@ export default function ProductsPage() {
   const toast = useToast()
   const { data, meta, isLoading, filters, setFilter, setPage, refetch } = useProducts()
   const [categories, setCategories] = useState<Category[]>([])
+  const [vendors, setVendors] = useState<{ id: string; name: string }[]>([])
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [lowStockCount, setLowStockCount] = useState(0)
 
   useEffect(() => {
-    fetch("/api/categories")
-      .then((r) => r.json())
-      .then((json) => setCategories(json.data ?? []))
-      .catch(() => {})
-    // Cek low stock count
-    fetch("/api/products?lowStock=true&limit=1")
-      .then((r) => r.json())
-      .then((json) => setLowStockCount(json.meta?.total ?? 0))
-      .catch(() => {})
+    Promise.all([
+      fetch("/api/categories").then((r) => r.json()).then((j) => setCategories(j.data ?? [])),
+      fetch("/api/vendors?isActive=true").then((r) => r.json()).then((j) => setVendors(j.data ?? [])),
+      fetch("/api/products?lowStock=true&limit=1").then((r) => r.json()).then((j) => setLowStockCount(j.meta?.total ?? 0)),
+    ]).catch(() => {})
   }, [])
 
   async function handleCreate(formData: CreateProductInput) {
@@ -85,6 +82,7 @@ export default function ProductsPage() {
         meta={meta}
         isLoading={isLoading}
         categories={categories}
+        vendors={vendors}
         filters={filters}
         onFilterChange={setFilter}
         onPageChange={setPage}

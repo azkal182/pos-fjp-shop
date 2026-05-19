@@ -9,6 +9,7 @@ interface Filters {
   search: string
   categoryId: string
   isActive: string
+  vendorId: string
 }
 
 export function useProducts() {
@@ -16,6 +17,7 @@ export function useProducts() {
     search: "",
     categoryId: "",
     isActive: "true",
+    vendorId: "",
   })
   const [page, setPage] = useState(1)
   const [data, setData] = useState<ProductWithCategory[]>([])
@@ -35,6 +37,7 @@ export function useProducts() {
       if (debouncedSearch) params.set("search", debouncedSearch)
       if (filters.categoryId) params.set("categoryId", filters.categoryId)
       if (filters.isActive) params.set("isActive", filters.isActive)
+      if (filters.vendorId) params.set("vendorId", filters.vendorId)
 
       const res = await fetch(`/api/products?${params}`)
       const json = await res.json()
@@ -55,7 +58,7 @@ export function useProducts() {
   // Reset ke page 1 saat filter berubah
   useEffect(() => {
     setPage(1)
-  }, [debouncedSearch, filters.categoryId, filters.isActive])
+  }, [debouncedSearch, filters.categoryId, filters.isActive, filters.vendorId])
 
   function setFilter(key: string, value: string) {
     setFilters((prev) => ({ ...prev, [key]: value }))

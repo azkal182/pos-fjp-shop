@@ -48,8 +48,11 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
     },
   })
 
-  const { register, handleSubmit, control, setValue, formState: { errors } } = methods
+  const { register, handleSubmit, control, setValue, watch, formState: { errors } } = methods
   const { fields, append, remove } = useFieldArray({ control, name: "items" })
+
+  // Watch vendorId untuk pass ke PurchaseItemRow
+  const selectedVendorId = watch("vendorId")
 
   useEffect(() => {
     fetch("/api/vendors?isActive=true")
@@ -249,7 +252,11 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
                           Hapus
                         </Button>
                       </div>
-                      <PurchaseItemRow index={index} onRemove={() => remove(index)} />
+                      <PurchaseItemRow
+                        index={index}
+                        onRemove={() => remove(index)}
+                        vendorId={selectedVendorId || undefined}
+                      />
                     </div>
                   ))
                 )}

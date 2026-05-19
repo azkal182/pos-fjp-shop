@@ -4,6 +4,7 @@ import { log } from "@/lib/logger"
 import { generateCode } from "@/lib/utils"
 import { calculatePagination } from "@/lib/api-response"
 import { createMovement } from "@/features/stock-movements/services/stock-movement.service"
+import { updateAfterPurchase } from "@/features/products/services/product-vendor-price.service"
 import type { CreatePurchaseInput, PriceChange } from "../schemas/purchase.schema"
 
 export interface PurchaseFilter {
@@ -176,6 +177,12 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
     itemCount: data.items.length,
     totalAmount,
   })
+
+  // Update ProductVendorPrice catalog setelah PO selesai
+  const purchaseDate = new Date(data.purchaseDate)
+  for (const item of data.items) {
+    await updateAfterPurchase(item.productId, data.vendorId, item.buyPrice, purchaseDate)
+  }
 
   return getPurchaseById(purchase.id)
 }
