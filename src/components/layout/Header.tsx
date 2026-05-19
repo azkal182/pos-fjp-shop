@@ -1,36 +1,32 @@
 "use client"
 
 import { usePathname, useRouter } from "next/navigation"
-import { LogOut, User } from "lucide-react"
+import {
+  LogOut, User, Settings, Bell, ChevronDown,
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { navItems } from "@/config/nav.config"
+import { SidebarTrigger } from "@/components/ui/sidebar"
+import { Separator } from "@/components/ui/separator"
+import { Breadcrumb } from "./Breadcrumb"
 import { signOut, useSession } from "@/lib/auth-client"
 
-function getPageTitle(pathname: string): string {
-  if (pathname === "/") return "Dashboard"
-  const match = navItems.find(
-    (item) => item.href !== "/" && pathname.startsWith(item.href)
-  )
-  return match?.label ?? "Halaman"
-}
-
 export function Header() {
-  const pathname = usePathname()
   const router = useRouter()
   const { data: session } = useSession()
 
-  const title = getPageTitle(pathname)
   const user = session?.user
   const initials = user?.name
-    ? user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
+    ? user.name.split(" ").map((n: string) => n[0]).join("").toUpperCase().slice(0, 2)
     : "U"
 
   async function handleLogout() {
@@ -40,30 +36,73 @@ export function Header() {
   }
 
   return (
-    <header className="flex items-center justify-between px-6 py-3 border-b bg-background min-h-[57px]">
-      <h1 className="text-lg font-semibold">{title}</h1>
+    <header className="flex h-14 shrink-0 items-center gap-2 border-b bg-background px-4">
+      {/* Sidebar toggle + breadcrumb */}
+      <div className="flex flex-1 items-center gap-2">
+        <SidebarTrigger className="-ml-1" />
+        <Separator orientation="vertical" className="h-4" />
+        <Breadcrumb />
+      </div>
 
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <Button variant="ghost" className="flex items-center gap-2 h-9 px-2">
-            <Avatar className="h-7 w-7">
-              <AvatarFallback className="text-xs">{initials}</AvatarFallback>
-            </Avatar>
-            <span className="text-sm hidden sm:block">{user?.name ?? "User"}</span>
-          </Button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-48">
-          <div className="px-2 py-1.5">
-            <p className="text-sm font-medium">{user?.name}</p>
-            <p className="text-xs text-muted-foreground truncate">{user?.email}</p>
-          </div>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleLogout} className="text-destructive focus:text-destructive">
-            <LogOut className="h-4 w-4 mr-2" />
-            Keluar
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      {/* Right side actions */}
+      <div className="flex items-center gap-1">
+        {/* Notification bell — placeholder */}
+        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground" aria-label="Notifikasi">
+          <Bell className="h-4 w-4" />
+        </Button>
+
+        {/* User menu */}
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant="ghost"
+              className="flex items-center gap-2 h-8 px-2 rounded-lg"
+            >
+              <Avatar className="h-6 w-6">
+                <AvatarFallback className="text-[10px] font-semibold bg-primary text-primary-foreground">
+                  {initials}
+                </AvatarFallback>
+              </Avatar>
+              <span className="hidden sm:block text-sm font-medium max-w-[120px] truncate">
+                {user?.name ?? "User"}
+              </span>
+              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground hidden sm:block" />
+            </Button>
+          </DropdownMenuTrigger>
+
+          <DropdownMenuContent align="end" className="w-56" sideOffset={8}>
+            <DropdownMenuLabel className="font-normal">
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-semibold leading-none">{user?.name}</p>
+                <p className="text-xs text-muted-foreground leading-none truncate">
+                  {user?.email}
+                </p>
+              </div>
+            </DropdownMenuLabel>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuGroup>
+              <DropdownMenuItem asChild>
+                <a href="/settings" className="cursor-pointer">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Pengaturan
+                </a>
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+
+            <DropdownMenuSeparator />
+
+            <DropdownMenuItem
+              onClick={handleLogout}
+              className="text-destructive focus:text-destructive focus:bg-destructive/10 cursor-pointer"
+            >
+              <LogOut className="mr-2 h-4 w-4" />
+              Keluar
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </header>
   )
 }
