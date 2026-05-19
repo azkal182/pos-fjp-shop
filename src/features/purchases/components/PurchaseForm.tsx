@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react"
 import { useForm, useFieldArray, FormProvider } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Loader2, PackagePlus, Truck, CalendarDays, FileText, ShoppingCart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Separator } from "@/components/ui/separator"
+import { Badge } from "@/components/ui/badge"
 import {
   Select,
   SelectContent,
@@ -16,22 +17,20 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { PurchaseItemRow } from "./PurchaseItemRow"
 import { PriceChangeAlert } from "./PriceChangeAlert"
 import { createPurchaseSchema, type CreatePurchaseInput, type PriceChange } from "../schemas/purchase.schema"
+import { useToast } from "@/hooks/useToast"
 
-interface Vendor {
-  id: string
-  name: string
-}
+interface Vendor { id: string; name: string }
 
 interface PurchaseFormProps {
   onSuccess: () => void
 }
 
 export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
+  const toast = useToast()
   const [vendors, setVendors] = useState<Vendor[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [priceChanges, setPriceChanges] = useState<PriceChange[]>([])
@@ -57,6 +56,7 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
     (sum, item) => sum + (Number(item.quantity) || 0) * (Number(item.buyPrice) || 0),
     0
   )
+  const totalItems = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0)
 
   useEffect(() => {
     fetch("/api/vendors?isActive=true")
@@ -66,7 +66,6 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
   }, [])
 
   async function onSubmit(data: CreatePurchaseInput) {
-    // Deteksi perubahan harga dulu
     setIsSubmitting(true)
     try {
       const res = await fetch("/api/purchases/detect-price-changes", {
@@ -74,13 +73,10 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ items: data.items }),
       })
-
       if (res.ok) {
         const json = await res.json()
         const changes: PriceChange[] = json.data ?? []
-        const hasChanges = changes.some((c) => c.changed)
-
-        if (hasChanges) {
+        if (changes.some((c) => c.changed)) {
           setPriceChanges(changes)
           setPendingData(data)
           setShowPriceAlert(true)
@@ -88,10 +84,7 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
           return
         }
       }
-    } catch {
-      // Jika endpoint tidak ada, lanjut tanpa deteksi
-    }
-
+    } catch {}
     await submitPurchase(data, [])
   }
 
@@ -107,146 +100,194 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
       if (!res.ok) throw new Error(json.error ?? "Gagal menyimpan pembelian")
       onSuccess()
     } catch (err) {
-      // Re-throw agar page bisa handle
-      throw err
+      toast.error(err instanceof Error ? err.message : "Terjadi kesalahan")
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  async function handlePriceAlertConfirm(confirmedIds: string[]) {
-    setShowPriceAlert(false)
-    if (pendingData) {
-      await submitPurchase(pendingData, confirmedIds)
-    }
-  }
-
-  function handlePriceAlertSkip() {
-    setShowPriceAlert(false)
-    if (pendingData) {
-      submitPurchase(pendingData, [])
-    }
-  }
-
   return (
     <FormProvider {...methods}>
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-        {/* Header info */}
-        <Card>
-          <CardHeader className="pb-4">
-            <CardTitle className="text-base">Informasi Pembelian</CardTitle>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <form onSubmit={handleSubmit(onSubmit)}>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+          {/* ── Kolom kiri: Info pembelian ── */}
+          <div className="lg:col-span-1 space-y-4">
             {/* Vendor */}
-            <div className="space-y-2">
-              <Label>Vendor</Label>
-              <Select onValueChange={(val) => setValue("vendorId", val)}>
-                <SelectTrigger aria-invalid={!!errors.vendorId}>
-                  <SelectValue placeholder="Pilih vendor..." />
-                </SelectTrigger>
-                <SelectContent>
-                  {vendors.map((v) => (
-                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {errors.vendorId && (
-                <p className="text-xs text-destructive">{errors.vendorId.message}</p>
-              )}
+            <div className="rounded-lg border bg-card p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <Truck className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Vendor</h3>
+              </div>
+              <div className="space-y-2">
+                <Label>Pilih Vendor</Label>
+                <Select onValueChange={(val) => setValue("vendorId", val)}>
+                  <SelectTrigger aria-invalid={!!errors.vendorId} className="w-full">
+                    <SelectValue placeholder="Pilih vendor..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {vendors.map((v) => (
+                      <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.vendorId && (
+                  <p className="text-xs text-destructive">{errors.vendorId.message}</p>
+                )}
+              </div>
             </div>
 
             {/* Tanggal */}
-            <div className="space-y-2">
-              <Label htmlFor="purchaseDate">Tanggal Pembelian</Label>
-              <Input
-                id="purchaseDate"
-                type="date"
-                {...register("purchaseDate")}
-                aria-invalid={!!errors.purchaseDate}
-              />
-              {errors.purchaseDate && (
-                <p className="text-xs text-destructive">{errors.purchaseDate.message}</p>
-              )}
+            <div className="rounded-lg border bg-card p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Tanggal Pembelian</h3>
+              </div>
+              <div className="space-y-2">
+                <Input
+                  type="date"
+                  {...register("purchaseDate")}
+                  aria-invalid={!!errors.purchaseDate}
+                />
+                {errors.purchaseDate && (
+                  <p className="text-xs text-destructive">{errors.purchaseDate.message}</p>
+                )}
+              </div>
             </div>
 
             {/* Catatan */}
-            <div className="space-y-2">
-              <Label htmlFor="notes">Catatan <span className="text-muted-foreground">(opsional)</span></Label>
+            <div className="rounded-lg border bg-card p-4 space-y-4">
+              <div className="flex items-center gap-2">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Catatan</h3>
+              </div>
               <Textarea
-                id="notes"
-                placeholder="Catatan pembelian..."
-                rows={1}
+                placeholder="Catatan pembelian (opsional)..."
+                rows={3}
                 {...register("notes")}
+                className="resize-none"
               />
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Items */}
-        <Card>
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-base">Item Pembelian</CardTitle>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => append({ productId: "", quantity: 1, buyPrice: 0 })}
-              >
-                <Plus className="h-4 w-4 mr-1" />
-                Tambah Item
+            {/* Summary card — sticky di desktop */}
+            <div className="rounded-lg border bg-card p-4 space-y-3 lg:sticky lg:top-4">
+              <div className="flex items-center gap-2">
+                <ShoppingCart className="h-4 w-4 text-muted-foreground" />
+                <h3 className="text-sm font-semibold">Ringkasan</h3>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Jumlah Jenis</span>
+                  <span className="font-medium">{fields.length} produk</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted-foreground">Total Qty</span>
+                  <span className="font-medium">{totalItems} item</span>
+                </div>
+                <Separator />
+                <div className="flex justify-between items-center">
+                  <span className="font-semibold">Total</span>
+                  <CurrencyDisplay amount={totalAmount} className="text-lg font-bold" />
+                </div>
+              </div>
+              <Button type="submit" disabled={isSubmitting} className="w-full h-10 gap-2">
+                {isSubmitting
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Menyimpan...</>
+                  : <><PackagePlus className="h-4 w-4" /> Simpan Pembelian</>
+                }
               </Button>
             </div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {/* Header kolom */}
-            <div className="grid grid-cols-[1fr_80px_140px_100px_36px] gap-2 text-xs font-medium text-muted-foreground px-0">
-              <span>Produk</span>
-              <span className="text-center">Qty</span>
-              <span>Harga Beli</span>
-              <span className="text-right">Subtotal</span>
-              <span />
+          </div>
+
+          {/* ── Kolom kanan: Item pembelian ── */}
+          <div className="lg:col-span-2">
+            <div className="rounded-lg border bg-card overflow-hidden">
+              {/* Header */}
+              <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30">
+                <div className="flex items-center gap-2">
+                  <PackagePlus className="h-4 w-4 text-muted-foreground" />
+                  <h3 className="text-sm font-semibold">Item Pembelian</h3>
+                  {fields.length > 0 && (
+                    <Badge variant="secondary" className="text-xs">{fields.length}</Badge>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 h-8 text-xs"
+                  onClick={() => append({ productId: "", quantity: 1, buyPrice: 0 })}
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Tambah Item
+                </Button>
+              </div>
+
+              {/* Column headers */}
+              <div className="hidden sm:grid grid-cols-[1fr_72px_130px_90px_36px] gap-2 px-4 py-2 bg-muted/20 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b">
+                <span>Produk</span>
+                <span className="text-center">Qty</span>
+                <span>Harga Beli</span>
+                <span className="text-right">Subtotal</span>
+                <span />
+              </div>
+
+              {/* Items */}
+              <div className="divide-y">
+                {fields.length === 0 ? (
+                  <div className="px-4 py-12 text-center">
+                    <PackagePlus className="h-10 w-10 text-muted-foreground/30 mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground">Belum ada item</p>
+                    <p className="text-xs text-muted-foreground/70 mt-1">Klik "Tambah Item" untuk mulai</p>
+                  </div>
+                ) : (
+                  fields.map((field, index) => (
+                    <div key={field.id} className="px-4 py-3">
+                      {/* Mobile: label row number */}
+                      <div className="flex items-center justify-between mb-2 sm:hidden">
+                        <span className="text-xs font-semibold text-muted-foreground">Item #{index + 1}</span>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 text-xs text-destructive hover:text-destructive px-2"
+                          onClick={() => remove(index)}
+                        >
+                          Hapus
+                        </Button>
+                      </div>
+                      <PurchaseItemRow index={index} onRemove={() => remove(index)} />
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Footer total */}
+              {fields.length > 0 && (
+                <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/20">
+                  <span className="text-sm font-semibold text-muted-foreground">
+                    {fields.length} item · {totalItems} qty
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">Total:</span>
+                    <CurrencyDisplay amount={totalAmount} className="text-base font-bold" />
+                  </div>
+                </div>
+              )}
+
+              {errors.items && typeof errors.items === "object" && "message" in errors.items && (
+                <p className="text-xs text-destructive px-4 pb-3">{(errors.items as any).message}</p>
+              )}
             </div>
-
-            <Separator />
-
-            {fields.map((field, index) => (
-              <PurchaseItemRow
-                key={field.id}
-                index={index}
-                onRemove={() => remove(index)}
-              />
-            ))}
-
-            {errors.items && typeof errors.items === "object" && "message" in errors.items && (
-              <p className="text-xs text-destructive">{(errors.items as any).message}</p>
-            )}
-
-            <Separator />
-
-            {/* Total */}
-            <div className="flex items-center justify-between pt-2">
-              <span className="text-sm font-medium">Total Pembelian</span>
-              <CurrencyDisplay amount={totalAmount} className="text-lg font-bold" />
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Submit */}
-        <div className="flex justify-end gap-3">
-          <Button type="submit" disabled={isSubmitting} size="lg">
-            {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Simpan Pembelian
-          </Button>
+          </div>
         </div>
       </form>
 
-      {/* Price Change Alert */}
       <PriceChangeAlert
         open={showPriceAlert}
         changes={priceChanges}
-        onConfirm={handlePriceAlertConfirm}
-        onSkip={handlePriceAlertSkip}
+        onConfirm={(ids) => { setShowPriceAlert(false); pendingData && submitPurchase(pendingData, ids) }}
+        onSkip={() => { setShowPriceAlert(false); pendingData && submitPurchase(pendingData, []) }}
       />
     </FormProvider>
   )

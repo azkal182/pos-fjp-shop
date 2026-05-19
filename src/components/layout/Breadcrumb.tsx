@@ -9,6 +9,7 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
   BreadcrumbSeparator,
+  BreadcrumbEllipsis,
 } from "@/components/ui/breadcrumb"
 
 const segmentLabels: Record<string, string> = {
@@ -25,6 +26,14 @@ const segmentLabels: Record<string, string> = {
   settings: "Pengaturan",
   users: "Pengguna",
   new: "Baru",
+}
+
+/** Truncate long IDs/slugs to a readable label */
+function getLabel(segment: string): string {
+  if (segmentLabels[segment]) return segmentLabels[segment]
+  // Looks like a cuid/uuid — show truncated
+  if (segment.length > 16) return `${segment.slice(0, 8)}…`
+  return segment
 }
 
 export function Breadcrumb() {
@@ -45,32 +54,46 @@ export function Breadcrumb() {
   const segments = pathname.split("/").filter(Boolean)
   const crumbs = segments.map((segment, index) => {
     const href = "/" + segments.slice(0, index + 1).join("/")
-    const label = segmentLabels[segment] ?? segment
+    const label = getLabel(segment)
     const isLast = index === segments.length - 1
-    return { href, label, isLast }
+    return { href, label, isLast, segment }
   })
+
+  // Collapse middle crumbs if more than 3 deep
+  const shouldCollapse = crumbs.length > 3
+  const visibleCrumbs = shouldCollapse
+    ? [crumbs[0], null, crumbs[crumbs.length - 1]] // null = ellipsis
+    : crumbs
 
   return (
     <BreadcrumbRoot>
-      <BreadcrumbList>
-        <BreadcrumbItem>
+      <BreadcrumbList className="flex-nowrap overflow-hidden">
+        <BreadcrumbItem className="shrink-0">
           <BreadcrumbLink asChild>
             <Link href="/">Dashboard</Link>
           </BreadcrumbLink>
         </BreadcrumbItem>
 
-        {crumbs.map((crumb) => (
-          <span key={crumb.href} className="contents">
-            <BreadcrumbSeparator />
-            <BreadcrumbItem>
-              {crumb.isLast ? (
-                <BreadcrumbPage>{crumb.label}</BreadcrumbPage>
-              ) : (
-                <BreadcrumbLink asChild>
-                  <Link href={crumb.href}>{crumb.label}</Link>
-                </BreadcrumbLink>
-              )}
-            </BreadcrumbItem>
+        {visibleCrumbs.map((crumb, i) => (
+          <span key={i} className="contents">
+            <BreadcrumbSeparator className="shrink-0" />
+            {crumb === null ? (
+              <BreadcrumbItem className="shrink-0">
+                <BreadcrumbEllipsis />
+              </BreadcrumbItem>
+            ) : (
+              <BreadcrumbItem className={crumb.isLast ? "min-w-0" : "shrink-0"}>
+                {crumb.isLast ? (
+                  <BreadcrumbPage className="max-w-[160px] truncate block">
+                    {crumb.label}
+                  </BreadcrumbPage>
+                ) : (
+                  <BreadcrumbLink asChild className="shrink-0">
+                    <Link href={crumb.href}>{crumb.label}</Link>
+                  </BreadcrumbLink>
+                )}
+              </BreadcrumbItem>
+            )}
           </span>
         ))}
       </BreadcrumbList>

@@ -24,7 +24,9 @@ export function CustomerSelect() {
   const [results, setResults] = useState<Customer[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
   const inputRef = useRef<HTMLInputElement>(null)
+  const listRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!search.trim()) { setResults([]); return }
@@ -39,6 +41,13 @@ export function CustomerSelect() {
     }, 300)
     return () => clearTimeout(timer)
   }, [search])
+
+  useEffect(() => {
+    if (activeIndex >= 0 && listRef.current) {
+      const item = listRef.current.children[activeIndex] as HTMLElement
+      item?.scrollIntoView({ block: "nearest" })
+    }
+  }, [activeIndex])
 
   async function handleSelect(customer: Customer) {
     let hasDebt = false
@@ -58,7 +67,29 @@ export function CustomerSelect() {
     clearCustomer()
     setSearch("")
     setResults([])
+    setActiveIndex(-1)
     setTimeout(() => inputRef.current?.focus(), 50)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    // +1 for walk-in option at index 0
+    const total = results.length + 1
+    if (!showDropdown) return
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      setActiveIndex((prev) => Math.min(prev + 1, total - 1))
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault()
+      setActiveIndex((prev) => Math.max(prev - 1, 0))
+    } else if (e.key === "Enter") {
+      e.preventDefault()
+      if (activeIndex === 0) { handleClear(); return }
+      const customer = results[activeIndex - 1]
+      if (customer) handleSelect(customer)
+    } else if (e.key === "Escape") {
+      setShowDropdown(false)
+      setActiveIndex(-1)
+    }
   }
 
   // Customer sudah dipilih
@@ -112,8 +143,12 @@ export function CustomerSelect() {
           onChange={(e) => { setSearch(e.target.value); setShowDropdown(true) }}
           onFocus={() => setShowDropdown(true)}
           onBlur={() => setTimeout(() => setShowDropdown(false), 200)}
+          onKeyDown={handleKeyDown}
           placeholder="Cari customer..."
           className="pl-8 text-sm h-9"
+          role="combobox"
+          aria-autocomplete="list"
+          aria-expanded={showDropdown}
         />
       </div>
 
@@ -121,12 +156,19 @@ export function CustomerSelect() {
       {showDropdown && (
         <div className="absolute left-0 right-0 mt-1 bg-background border rounded-lg shadow-xl overflow-hidden"
           style={{ zIndex: 9999, top: "100%" }}
+          ref={listRef}
+          role="listbox"
         >
           {/* Walk-in option */}
           <button
             type="button"
-            className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted transition-colors border-b flex items-center gap-2"
+            role="option"
+            aria-selected={activeIndex === 0}
+            className={`w-full text-left px-3 py-2.5 text-sm transition-colors border-b flex items-center gap-2 ${
+              activeIndex === 0 ? "bg-accent text-accent-foreground" : "hover:bg-muted"
+            }`}
             onMouseDown={(e) => { e.preventDefault(); handleClear() }}
+            onMouseEnter={() => setActiveIndex(0)}
           >
             <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted shrink-0">
               <User className="h-3.5 w-3.5 text-muted-foreground" />
@@ -145,12 +187,17 @@ export function CustomerSelect() {
             <div className="px-3 py-2.5 text-xs text-muted-foreground">Tidak ada customer ditemukan</div>
           )}
 
-          {results.map((c) => (
+          {results.map((c, i) => (
             <button
               key={c.id}
               type="button"
-              className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted transition-colors flex items-center gap-2 border-b last:border-0"
+              role="option"
+              aria-selected={activeIndex === i + 1}
+              className={`w-full text-left px-3 py-2.5 text-sm transition-colors flex items-center gap-2 border-b last:border-0 ${
+                activeIndex === i + 1 ? "bg-accent text-accent-foreground" : "hover:bg-muted"
+              }`}
               onMouseDown={(e) => { e.preventDefault(); handleSelect(c) }}
+              onMouseEnter={() => setActiveIndex(i + 1)}
             >
               <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 shrink-0">
                 <User className="h-3.5 w-3.5 text-primary" />
