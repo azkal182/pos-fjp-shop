@@ -17,6 +17,11 @@
 | Sprint 6 | [sprint-6-hutang-pembayaran.md](./sprint-6-hutang-pembayaran.md) | Hutang & Pembayaran Hutang | Minggu 7 |
 | Sprint 7 | [sprint-7-laporan-dashboard.md](./sprint-7-laporan-dashboard.md) | Laporan & Dashboard | Minggu 8 |
 | Sprint 8 | [sprint-8-settings-users-polish.md](./sprint-8-settings-users-polish.md) | Settings, Users & Polish | Minggu 9 |
+| Sprint 9 | [sprint-9-schema-keuangan.md](./sprint-9-schema-keuangan.md) | Schema & Migration: Sistem Keuangan Lanjutan | Minggu 10–11 |
+| Sprint 10 | [sprint-10-multi-vendor-produk.md](./sprint-10-multi-vendor-produk.md) | Multi-Vendor per Produk & Filter | Minggu 12 |
+| Sprint 11 | [sprint-11-pembelian-hutang-vendor.md](./sprint-11-pembelian-hutang-vendor.md) | Pembelian dengan Hutang & Keuangan Vendor | Minggu 13–14 |
+| Sprint 12 | [sprint-12-deposit-sistem.md](./sprint-12-deposit-sistem.md) | Sistem Deposit (Customer & Vendor) | Minggu 15 |
+| Sprint 13 | [sprint-13-laporan-keuangan-lanjutan.md](./sprint-13-laporan-keuangan-lanjutan.md) | Laporan Keuangan Lanjutan & Export PDF | Minggu 16–17 |
 
 ---
 
@@ -41,18 +46,26 @@ Sprint 1 (Foundation)
                             └── Sprint 6 (Hutang)   ← bergantung pada Sprint 5
                                     └── Sprint 7 (Laporan & Dashboard)  ← bergantung pada semua
                                             └── Sprint 8 (Polish)       ← bergantung pada semua
+                                                    └── Sprint 9 (Schema Keuangan)  ← migration besar
+                                                            └── Sprint 10 (Multi-Vendor)
+                                                            └── Sprint 11 (Hutang Vendor)
+                                                            └── Sprint 12 (Deposit)
+                                                                    └── Sprint 13 (Laporan Lanjutan)
 ```
 
-Sprint 2 dan Sprint 3 bisa dikerjakan paralel setelah Sprint 1 selesai.
+Sprint 10, 11, 12 bisa dikerjakan paralel setelah Sprint 9 selesai.
 
 ---
 
 ## Business Rules Kritis (Jangan Sampai Terlewat)
 
 1. **Walk-in customer** — tidak boleh hutang, wajib bayar lunas
-2. **FIFO debt allocation** — hutang terlama diselesaikan dulu
-3. **Overpay di POS** — jika customer punya hutang lama, kelebihan bayar dialokasikan ke hutang (bukan kembalian)
-4. **Stok** — hanya bisa berubah via purchase atau stock adjustment, tidak bisa diedit manual di form produk
-5. **Soft delete customer** — ditolak jika masih ada hutang aktif
-6. **Price change detection** — saat pembelian, sistem deteksi perubahan harga beli dan minta konfirmasi admin
-7. **HPP snapshot** — `TransactionItem.buyPrice` adalah snapshot HPP saat transaksi, bukan harga beli terkini
+2. **FIFO debt allocation** — hutang terlama diselesaikan dulu (customer dan vendor)
+3. **Overpay di POS** — user pilih: kembalikan tunai atau simpan deposit
+4. **Deposit** — balance negatif di LedgerAccount = toko hutang ke party
+5. **Stok** — hanya bisa berubah via purchase atau stock adjustment, tidak bisa diedit manual di form produk
+6. **Soft delete customer** — ditolak jika masih ada hutang aktif
+7. **Price change detection** — saat pembelian, sistem deteksi perubahan harga beli dan minta konfirmasi admin
+8. **HPP snapshot** — `TransactionItem.buyPrice` adalah snapshot HPP saat transaksi, bukan harga beli terkini
+9. **LedgerEntry immutable** — entry yang sudah dibuat tidak boleh diedit/hapus, hanya bisa di-reverse dengan entry baru (ADJUSTMENT)
+10. **Deposit tidak bisa melebihi saldo** — validasi ketat saat gunakan deposit
