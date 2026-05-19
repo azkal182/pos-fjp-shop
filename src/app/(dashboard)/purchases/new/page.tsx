@@ -1,14 +1,32 @@
-import type { Metadata } from "next"
-import { PlaceholderPage } from "@/components/shared/PlaceholderPage"
+"use client"
 
-export const metadata: Metadata = { title: "Pembelian Baru" }
+import { useRouter } from "next/navigation"
+import { ArrowLeft } from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { PageWrapper } from "@/components/layout/PageWrapper"
+import { PurchaseForm } from "@/features/purchases/components/PurchaseForm"
+import { useToast } from "@/hooks/useToast"
 
 export default function NewPurchasePage() {
+  const router = useRouter()
+  const toast = useToast()
+
+  async function handleSuccess() {
+    toast.success("Pembelian berhasil disimpan. Stok telah diperbarui.")
+    router.push("/purchases")
+  }
+
   return (
-    <PlaceholderPage
+    <PageWrapper
       title="Pembelian Baru"
-      description="Form input pembelian barang multi-item dari vendor."
-      sprint="Sprint 4"
-    />
+      actions={
+        <Button variant="outline" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Kembali
+        </Button>
+      }
+    >
+      <PurchaseForm onSuccess={handleSuccess} />
+    </PageWrapper>
   )
 }
