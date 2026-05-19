@@ -1,12 +1,13 @@
 "use client"
 
+import { useEffect } from "react"
 import { Printer, ShoppingCart } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { StatusBadge } from "@/components/shared/StatusBadge"
 import { useCartStore } from "../stores/cart.store"
-import { APP_NAME } from "@/config/app.config"
+import { useSettingsStore } from "@/stores/settings.store"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
 
@@ -40,6 +41,9 @@ interface ReceiptProps {
 
 export function Receipt({ transaction, onClose }: ReceiptProps) {
   const clearCart = useCartStore((s) => s.clearCart)
+  const { store, load } = useSettingsStore()
+
+  useEffect(() => { load() }, [load])
 
   function handleNewTransaction() {
     clearCart()
@@ -54,7 +58,9 @@ export function Receipt({ transaction, onClose }: ReceiptProps) {
     <div className="space-y-4">
       {/* Header struk */}
       <div className="text-center space-y-1 print:block">
-        <h2 className="font-bold text-lg">{APP_NAME}</h2>
+        <h2 className="font-bold text-lg">{store.storeName}</h2>
+        {store.storeAddress && <p className="text-xs text-muted-foreground">{store.storeAddress}</p>}
+        {store.storePhone && <p className="text-xs text-muted-foreground">{store.storePhone}</p>}
         <p className="text-xs text-muted-foreground font-mono">{transaction.code}</p>
         <p className="text-xs text-muted-foreground">
           {format(new Date(transaction.transactionDate), "dd MMMM yyyy HH:mm", { locale: idLocale })}
@@ -127,6 +133,10 @@ export function Receipt({ transaction, onClose }: ReceiptProps) {
       </div>
 
       <Separator />
+
+      {store.receiptNote && (
+        <p className="text-xs text-center text-muted-foreground">{store.receiptNote}</p>
+      )}
 
       {/* Actions */}
       <div className="flex gap-2 print:hidden">

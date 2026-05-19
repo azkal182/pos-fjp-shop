@@ -15,6 +15,7 @@ import {
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { DebtAllocationPreview } from "./DebtAllocationPreview"
 import { useCartStore } from "../stores/cart.store"
+import { useSettingsStore } from "@/stores/settings.store"
 import { useDebounce } from "@/hooks/useDebounce"
 import type { FifoPreview } from "@/features/debts/types/debt.types"
 
@@ -32,6 +33,11 @@ export function PaymentModal({ open, onOpenChange, onConfirm, isSubmitting }: Pa
     paidAmount, setPaidAmount,
     totalAmount, debtAmount, overpayAmount, changeAmount, isWalkIn,
   } = useCartStore()
+
+  const { pos, load } = useSettingsStore()
+  const availableMethods = pos.paymentMethods.length > 0 ? pos.paymentMethods : ["CASH", "TRANSFER"]
+
+  useEffect(() => { load() }, [load])
 
   const total = totalAmount()
   const debt = debtAmount()
@@ -93,7 +99,7 @@ export function PaymentModal({ open, onOpenChange, onConfirm, isSubmitting }: Pa
           <div className="space-y-2">
             <Label>Metode Pembayaran</Label>
             <div className="grid grid-cols-2 gap-2">
-              {["CASH", "TRANSFER"].map((method) => (
+              {availableMethods.map((method) => (
                 <button
                   key={method}
                   type="button"

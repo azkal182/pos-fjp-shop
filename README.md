@@ -1,36 +1,76 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# POS FJP Shop
 
-## Getting Started
+Sistem Point of Sale berbasis web untuk toko retail. Dibangun dengan Next.js 16, Prisma v7, Better Auth, dan PostgreSQL.
 
-First, run the development server:
+## Stack
+
+- **Framework:** Next.js 16 (App Router)
+- **Database:** PostgreSQL + Prisma v7
+- **Auth:** Better Auth
+- **UI:** Tailwind CSS + shadcn/ui
+- **State:** Zustand
+- **Forms:** React Hook Form + Zod
+- **Charts:** Recharts
+
+## Fitur
+
+- Kasir (POS) dengan cart, diskon, dan receipt
+- Manajemen produk, kategori, vendor, customer
+- Pembelian barang masuk dengan deteksi perubahan harga
+- Manajemen hutang dengan alokasi FIFO dan buku hutang per customer
+- Laporan: penjualan, produk terlaris, hutang aging, profit
+- Dashboard real-time
+- Pengaturan toko, POS, dan kategori aging hutang
+
+## Setup
+
+### 1. Clone & Install
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+git clone <repo>
+cd pos-fjp-shop
+bun install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2. Environment
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+cp .env.example .env
+# Edit .env sesuai konfigurasi database dan secret Anda
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+### 3. Database
 
-## Learn More
+```bash
+# Jalankan migrations
+bun --bun run prisma migrate deploy
 
-To learn more about Next.js, take a look at the following resources:
+# Generate Prisma client
+bun --bun run prisma generate
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+# Seed data awal (settings + aging categories + admin user)
+bun run seed
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Default admin credentials setelah seed:
+- Email: `admin@fjpshop.com`
+- Password: `admin123456`
 
-## Deploy on Vercel
+### 4. Jalankan
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+bun run dev
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Buka [http://localhost:3000](http://localhost:3000)
+
+## Scripts
+
+| Script | Deskripsi |
+|--------|-----------|
+| `bun run dev` | Development server |
+| `bun run build` | Production build |
+| `bun run start` | Production server |
+| `bun run seed` | Seed database |
+| `bun --bun run prisma migrate dev` | Buat migration baru |
+| `bun --bun run prisma studio` | Prisma Studio (GUI database) |

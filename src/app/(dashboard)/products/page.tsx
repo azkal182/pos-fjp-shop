@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { Plus } from "lucide-react"
+import { Plus, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageWrapper } from "@/components/layout/PageWrapper"
 import { ProductTable } from "@/features/products/components/ProductTable"
@@ -10,10 +10,7 @@ import { useProducts } from "@/features/products/hooks/useProducts"
 import { useToast } from "@/hooks/useToast"
 import type { CreateProductInput } from "@/features/products/schemas/product.schema"
 
-interface Category {
-  id: string
-  name: string
-}
+interface Category { id: string; name: string }
 
 export default function ProductsPage() {
   const toast = useToast()
@@ -21,11 +18,17 @@ export default function ProductsPage() {
   const [categories, setCategories] = useState<Category[]>([])
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
+  const [lowStockCount, setLowStockCount] = useState(0)
 
   useEffect(() => {
     fetch("/api/categories")
       .then((r) => r.json())
       .then((json) => setCategories(json.data ?? []))
+      .catch(() => {})
+    // Cek low stock count
+    fetch("/api/products?lowStock=true&limit=1")
+      .then((r) => r.json())
+      .then((json) => setLowStockCount(json.meta?.total ?? 0))
       .catch(() => {})
   }, [])
 
@@ -44,9 +47,7 @@ export default function ProductsPage() {
       refetch()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Terjadi kesalahan")
-    } finally {
-      setIsCreating(false)
-    }
+    } finally { setIsCreating(false) }
   }
 
   return (
@@ -59,6 +60,26 @@ export default function ProductsPage() {
         </Button>
       }
     >
+      {/* Low stock alert banner */}
+      {lowStockCount > 0 && (
+        <div className="flex items-center justify-between rounded-lg bg-yellow-50 dark:bg-yellow-950/20 border border-yellow-200 dark:border-yellow-900/50 px-4 py-3">
+          <div className="flex items-center gap-2 text-yellow-700 dark:text-yellow-400">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span className="text-sm font-medium">
+              {lowStockCount} produk memiliki stok di bawah minimum
+            </span>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs border-yellow-300 text-yellow-700 hover:bg-yellow-100 dark:border-yellow-700 dark:text-yellow-400"
+            onClick={() => setFilter("isActive", "true")}
+          >
+            Lihat Stok Rendah
+          </Button>
+        </div>
+      )}
+
       <ProductTable
         data={data}
         meta={meta}

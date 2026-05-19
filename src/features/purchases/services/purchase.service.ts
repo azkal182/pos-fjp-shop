@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { NotFoundError } from "@/lib/exceptions"
+import { NotFoundError, ValidationError } from "@/lib/exceptions"
 import { log } from "@/lib/logger"
 import { generateCode } from "@/lib/utils"
 import { calculatePagination } from "@/lib/api-response"
@@ -85,6 +85,18 @@ export async function detectPriceChanges(
 }
 
 export async function createPurchase(data: CreatePurchaseInput, userId: string) {
+  // Validasi vendor aktif
+  const vendor = await prisma.vendor.findUnique({ where: { id: data.vendorId }, select: { isActive: true, name: true } })
+  if (!vendor) throw new NotFoundError("Vendor")
+  if (!vendor.isActive) throw new ValidationError("Vendor tidak aktif")
+
+  // Validasi semua produk aktif
+  for (const item of data.items) {
+    const product = await prisma.product.findUnique({ where: { id: item.productId }, select: { isActive: true, name: true } })
+    if (!product) throw new NotFoundError(`Produk tidak ditemukan`)
+    if (!product.isActive) throw new ValidationError(`Produk "${product.name}" tidak aktif`)
+  }
+
   const code = generateCode("PO")
   const totalAmount = data.items.reduce(
     (sum, item) => sum + item.quantity * item.buyPrice,

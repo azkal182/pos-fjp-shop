@@ -17,21 +17,26 @@ export async function getAllProducts(filter: ProductListFilter = {}) {
     }),
     ...(categoryId && { categoryId }),
     ...(isActive !== undefined && { isActive }),
-    ...(lowStock && { stock: { lte: prisma.product.fields.minStock } }),
   }
 
-  const [data, total] = await Promise.all([
+  // lowStock filter: stock <= minStock — handled post-query for Prisma field comparison
+  const [allData, total] = await Promise.all([
     prisma.product.findMany({
       where,
       include: { category: true },
       orderBy: { name: "asc" },
-      skip: (page - 1) * limit,
-      take: limit,
+      ...(lowStock ? {} : { skip: (page - 1) * limit, take: limit }),
     }),
     prisma.product.count({ where }),
   ])
 
-  return { data, meta: calculatePagination(page, limit, total) }
+  if (lowStock) {
+    const filtered = allData.filter((p) => p.stock <= p.minStock)
+    const paginatedFiltered = filtered.slice((page - 1) * limit, page * limit)
+    return { data: paginatedFiltered, meta: calculatePagination(page, limit, filtered.length) }
+  }
+
+  return { data: allData, meta: calculatePagination(page, limit, total) }
 }
 
 export async function getProductById(id: string) {
