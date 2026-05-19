@@ -238,9 +238,16 @@ export function PurchaseForm({ onSuccess }: PurchaseFormProps) {
                   <div className="relative">
                     <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground">Rp</span>
                     <Input
-                      type="number" min={0} placeholder="Kosong = bayar lunas"
+                      type="number"
+                      min={0}
+                      placeholder="Kosong = bayar lunas"
                       className="pl-7 text-sm h-8"
-                      {...register("paidAmount")}
+                      value={watch("paidAmount") ?? ""}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        // Kosong → undefined (bayar lunas), ada nilai → number
+                        setValue("paidAmount", raw === "" ? undefined : parseFloat(raw) || 0)
+                      }}
                     />
                   </div>
                   <p className="text-xs text-muted-foreground">Isi jika bayar sebagian — sisa jadi hutang ke vendor</p>
