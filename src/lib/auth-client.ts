@@ -1,7 +1,11 @@
 import { createAuthClient } from "better-auth/react"
 
 export const authClient = createAuthClient({
-  baseURL: process.env.NEXT_PUBLIC_BETTER_AUTH_URL ?? process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
+  // Gunakan URL relatif agar bekerja di semua environment (dev, staging, production)
+  // Better Auth client akan otomatis menggunakan origin yang sama dengan halaman
+  baseURL: typeof window !== "undefined"
+    ? window.location.origin
+    : process.env.BETTER_AUTH_URL ?? "http://localhost:3000",
 })
 
 export const { signIn, signOut, signUp, useSession, getSession } = authClient
