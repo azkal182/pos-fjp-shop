@@ -1,17 +1,71 @@
+"use client"
+
 import { PageWrapper } from "@/components/layout/PageWrapper"
-import { LayoutDashboard } from "lucide-react"
+import { SalesCard } from "@/features/dashboard/components/SalesCard"
+import { SalesChart } from "@/features/dashboard/components/SalesChart"
+import { DebtSummaryCard } from "@/features/dashboard/components/DebtSummaryCard"
+import { TopProductsTable } from "@/features/dashboard/components/TopProductsTable"
+import { LowStockAlert } from "@/features/dashboard/components/LowStockAlert"
+import { useDashboard } from "@/features/dashboard/hooks/useDashboard"
+import { Button } from "@/components/ui/button"
+import { RefreshCw } from "lucide-react"
 
 export default function DashboardPage() {
+  const { data, isLoading, refetch } = useDashboard()
+
   return (
-    <PageWrapper title="Dashboard">
-      <div className="flex flex-col items-center justify-center min-h-[400px] gap-4 text-center">
-        <LayoutDashboard className="h-16 w-16 text-muted-foreground/30" />
-        <div>
-          <h3 className="text-lg font-medium text-muted-foreground">Dashboard</h3>
-          <p className="text-sm text-muted-foreground/70 mt-1">
-            Akan diimplementasikan di Sprint 7
-          </p>
+    <PageWrapper
+      title="Dashboard"
+      actions={
+        <Button variant="outline" size="sm" onClick={refetch} disabled={isLoading}>
+          <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+          Refresh
+        </Button>
+      }
+    >
+      {/* Row 1: Sales summary cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <SalesCard
+          title="Penjualan Hari Ini"
+          value={data?.salesSummary.todayRevenue ?? 0}
+          isLoading={isLoading}
+        />
+        <SalesCard
+          title="Transaksi Hari Ini"
+          value={data?.salesSummary.todayTransactions ?? 0}
+          isCount
+          isLoading={isLoading}
+        />
+        <SalesCard
+          title="Penjualan Minggu Ini"
+          value={data?.salesSummary.weekRevenue ?? 0}
+          isLoading={isLoading}
+        />
+        <SalesCard
+          title="Penjualan Bulan Ini"
+          value={data?.salesSummary.monthRevenue ?? 0}
+          change={data?.salesSummary.monthRevenueChange}
+          period="bulan lalu"
+          isLoading={isLoading}
+        />
+      </div>
+
+      {/* Row 2: Chart + Debt */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2">
+          <SalesChart data={data?.salesChart ?? []} isLoading={isLoading} />
         </div>
+        <DebtSummaryCard
+          totalOutstanding={data?.totalOutstandingDebt ?? 0}
+          debtByAging={data?.debtByAging ?? []}
+          isLoading={isLoading}
+        />
+      </div>
+
+      {/* Row 3: Top products + Low stock */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <TopProductsTable products={data?.topProducts ?? []} isLoading={isLoading} />
+        <LowStockAlert products={data?.lowStockProducts ?? []} isLoading={isLoading} />
       </div>
     </PageWrapper>
   )
