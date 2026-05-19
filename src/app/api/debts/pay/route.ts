@@ -3,7 +3,11 @@ import { withHandler } from "@/lib/api-handler"
 import { successResponse } from "@/lib/api-response"
 import { ValidationError, NotFoundError, ConflictError } from "@/lib/exceptions"
 import { prisma } from "@/lib/prisma"
-import { allocatePaymentFifo, hasOutstandingDebt } from "@/features/debts/services/debt.service"
+import {
+  allocatePaymentFifo,
+  hasOutstandingDebt,
+  getTotalOutstanding,
+} from "@/features/debts/services/debt.service"
 import { debtPaymentSchema } from "@/features/debts/schemas/debt.schema"
 import { log } from "@/lib/logger"
 
@@ -23,13 +27,23 @@ export const POST = withHandler(async (req: NextRequest) => {
   const hasDebt = await hasOutstandingDebt(customerId)
   if (!hasDebt) throw new ConflictError("Customer tidak memiliki hutang outstanding")
 
+  // Validasi nominal tidak melebihi total hutang
+  const totalOutstanding = await getTotalOutstanding(customerId)
+  if (amount > totalOutstanding) {
+    throw new ValidationError(
+      `Nominal melebihi total hutang. Maksimal: Rp ${totalOutstanding.toLocaleString("id-ID")}`
+    )
+  }
+
   const result = await allocatePaymentFifo(customerId, amount, undefined, notes)
 
   log.info("[DEBT]", "Manual debt payment processed", {
     customerId,
     customerName: customer.name,
     amount,
+    totalOutstanding,
     allocationsCount: result.allocations.length,
+    customerPaymentId: result.customerPaymentId,
   })
 
   return successResponse(result, 201)

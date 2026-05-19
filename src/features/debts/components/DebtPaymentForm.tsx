@@ -40,12 +40,14 @@ export function DebtPaymentForm({
   const [preview, setPreview] = useState<FifoPreview | null>(null)
   const [isLoadingPreview, setIsLoadingPreview] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [totalOutstanding, setTotalOutstanding] = useState<number | null>(null)
 
   const {
     register,
     handleSubmit,
     reset,
     watch,
+    setValue,
     formState: { errors },
   } = useForm<DebtPaymentInput>({
     resolver: zodResolver(debtPaymentSchema),
@@ -54,6 +56,18 @@ export function DebtPaymentForm({
 
   const amount = watch("amount")
   const debouncedAmount = useDebounce(amount, 500)
+
+  // Fetch total outstanding saat dialog dibuka
+  useEffect(() => {
+    if (!open) return
+    fetch(`/api/customers/${customerId}/debts`)
+      .then((r) => r.json())
+      .then((json) => {
+        const outstanding = json.data?.totalOutstanding ?? 0
+        setTotalOutstanding(outstanding)
+      })
+      .catch(() => {})
+  }, [open, customerId])
 
   // Fetch FIFO preview saat amount berubah
   useEffect(() => {
@@ -76,7 +90,12 @@ export function DebtPaymentForm({
   function handleClose() {
     reset()
     setPreview(null)
+    setTotalOutstanding(null)
     onOpenChange(false)
+  }
+
+  function handlePayFull() {
+    if (totalOutstanding) setValue("amount", totalOutstanding)
   }
 
   async function onSubmit(data: DebtPaymentInput) {
@@ -99,6 +118,8 @@ export function DebtPaymentForm({
     }
   }
 
+  const isOverLimit = totalOutstanding !== null && amount > totalOutstanding
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
@@ -106,12 +127,33 @@ export function DebtPaymentForm({
           <DialogTitle>Bayar Hutang</DialogTitle>
           <DialogDescription>
             Pembayaran untuk <span className="font-semibold">{customerName}</span>.
-            Alokasi menggunakan metode FIFO (hutang terlama dibayar dulu).
+            Alokasi otomatis menggunakan metode FIFO (hutang terlama dibayar dulu).
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <input type="hidden" {...register("customerId")} value={customerId} />
+
+          {/* Info total hutang */}
+          {totalOutstanding !== null && (
+            <div className="flex items-center justify-between rounded-md bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-900/50 px-3 py-2.5">
+              <div>
+                <p className="text-xs text-muted-foreground">Total Hutang Outstanding</p>
+                <p className="text-base font-bold text-red-700 dark:text-red-400">
+                  Rp {totalOutstanding.toLocaleString("id-ID")}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="text-xs h-7 border-red-300 text-red-700 hover:bg-red-100"
+                onClick={handlePayFull}
+              >
+                Bayar Lunas
+              </Button>
+            </div>
+          )}
 
           <div className="space-y-2">
             <Label htmlFor="pay-amount">Nominal Pembayaran</Label>
@@ -121,15 +163,21 @@ export function DebtPaymentForm({
                 id="pay-amount"
                 type="number"
                 min={1}
+                max={totalOutstanding ?? undefined}
                 placeholder="0"
-                className="pl-9 text-lg font-semibold h-11"
+                className={`pl-9 text-lg font-semibold h-11 ${isOverLimit ? "border-destructive" : ""}`}
                 {...register("amount", { valueAsNumber: true })}
-                aria-invalid={!!errors.amount}
+                aria-invalid={!!errors.amount || isOverLimit}
                 autoFocus
               />
             </div>
             {errors.amount && (
               <p className="text-xs text-destructive">{errors.amount.message}</p>
+            )}
+            {isOverLimit && (
+              <p className="text-xs text-destructive">
+                Nominal melebihi total hutang (Rp {totalOutstanding?.toLocaleString("id-ID")})
+              </p>
             )}
           </div>
 
@@ -152,7 +200,11 @@ export function DebtPaymentForm({
             <Button type="button" variant="outline" className="flex-1" onClick={handleClose} disabled={isSubmitting}>
               Batal
             </Button>
-            <Button type="submit" className="flex-1" disabled={isSubmitting || !amount || amount <= 0}>
+            <Button
+              type="submit"
+              className="flex-1"
+              disabled={isSubmitting || !amount || amount <= 0 || isOverLimit}
+            >
               {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Konfirmasi Pembayaran
             </Button>

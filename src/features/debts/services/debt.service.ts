@@ -8,6 +8,14 @@ type TxClient = Omit<
   "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
 >
 
+export async function getTotalOutstanding(customerId: string): Promise<number> {
+  const result = await globalPrisma.debt.aggregate({
+    where: { customerId, status: { in: ["UNPAID", "PARTIAL"] } },
+    _sum: { remainingAmount: true },
+  })
+  return Number(result._sum.remainingAmount ?? 0)
+}
+
 export async function hasOutstandingDebt(customerId: string): Promise<boolean> {
   const count = await globalPrisma.debt.count({
     where: { customerId, status: { in: ["UNPAID", "PARTIAL"] } },
@@ -184,13 +192,13 @@ export async function getCustomerPayments(customerId: string) {
 }
 
 export async function getCustomerLedger(customerId: string) {
-  // Ambil semua hutang dan semua pembayaran, gabungkan jadi ledger
-  const [debts, payments] = await Promise.all([
+  const [debts, customerPayments, orphanDebtPayments] = await Promise.all([
     globalPrisma.debt.findMany({
       where: { customerId },
       include: { transaction: { select: { code: true, transactionDate: true } } },
       orderBy: { debtDate: "asc" },
     }),
+    // Pembayaran baru — punya CustomerPayment header
     globalPrisma.customerPayment.findMany({
       where: { customerId },
       include: {
@@ -203,14 +211,25 @@ export async function getCustomerLedger(customerId: string) {
       },
       orderBy: { paymentDate: "asc" },
     }),
+    // Pembayaran lama — DebtPayment tanpa CustomerPayment (legacy)
+    globalPrisma.debtPayment.findMany({
+      where: {
+        customerPaymentId: null,
+        debt: { customerId },
+      },
+      include: {
+        debt: { select: { transaction: { select: { code: true } } } },
+      },
+      orderBy: { paymentDate: "asc" },
+    }),
   ])
 
   type LedgerEntry = {
     date: Date
     type: "DEBT" | "PAYMENT"
     description: string
-    debit: number    // hutang masuk (+)
-    credit: number   // pembayaran (-)
+    debit: number
+    credit: number
     reference: string
     id: string
     meta?: any
@@ -218,7 +237,7 @@ export async function getCustomerLedger(customerId: string) {
 
   const entries: LedgerEntry[] = []
 
-  // Hutang = debit (menambah saldo hutang)
+  // Hutang = debit
   for (const debt of debts) {
     entries.push({
       date: debt.debtDate,
@@ -231,8 +250,8 @@ export async function getCustomerLedger(customerId: string) {
     })
   }
 
-  // Pembayaran = kredit (mengurangi saldo hutang)
-  for (const payment of payments) {
+  // Pembayaran baru (via CustomerPayment)
+  for (const payment of customerPayments) {
     const sourceLabel =
       payment.source === "POS_OVERPAYMENT"
         ? `Overpay POS ${payment.sourceTransaction?.code ?? ""}`
@@ -256,20 +275,43 @@ export async function getCustomerLedger(customerId: string) {
     })
   }
 
-  // Sort by date asc
+  // Pembayaran lama (legacy DebtPayment tanpa header)
+  for (const dp of orphanDebtPayments) {
+    const sourceLabel =
+      dp.source === "POS_OVERPAYMENT"
+        ? `Overpay POS (legacy)`
+        : "Pembayaran langsung (legacy)"
+
+    entries.push({
+      date: dp.paymentDate,
+      type: "PAYMENT",
+      description: sourceLabel,
+      debit: 0,
+      credit: Number(dp.amount),
+      reference: dp.id,
+      id: dp.id,
+      meta: {
+        notes: dp.notes,
+        allocations: [{ debtCode: dp.debt.transaction.code, amount: Number(dp.amount) }],
+      },
+    })
+  }
+
   entries.sort((a, b) => a.date.getTime() - b.date.getTime())
 
-  // Hitung running balance
   let balance = 0
   const ledger = entries.map((entry) => {
     balance += entry.debit - entry.credit
     return { ...entry, balance }
   })
 
+  const totalPaidNew = customerPayments.reduce((s, p) => s + Number(p.amount), 0)
+  const totalPaidLegacy = orphanDebtPayments.reduce((s, p) => s + Number(p.amount), 0)
+
   return {
     ledger,
     totalDebt: debts.reduce((s, d) => s + Number(d.originalAmount), 0),
-    totalPaid: payments.reduce((s, p) => s + Number(p.amount), 0),
+    totalPaid: totalPaidNew + totalPaidLegacy,
     currentBalance: balance,
   }
 }

@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { Banknote } from "lucide-react"
+import { Banknote, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Select,
@@ -56,12 +56,30 @@ export function DebtTable({
 }: DebtTableProps) {
   const [payTarget, setPayTarget] = useState<{ id: string; name: string } | null>(null)
 
+  // Di global view: group by customer untuk tombol Bayar per customer
+  const customerMap = new Map<string, { id: string; name: string; phone: string | null; totalRemaining: number }>()
+  if (isGlobal) {
+    for (const row of data) {
+      const existing = customerMap.get(row.customerId)
+      if (existing) {
+        existing.totalRemaining += row.remainingAmount
+      } else {
+        customerMap.set(row.customerId, {
+          id: row.customerId,
+          name: row.customer.name,
+          phone: row.customer.phone,
+          totalRemaining: row.remainingAmount,
+        })
+      }
+    }
+  }
+
   const columns: Column<DebtRow>[] = [
     ...(isGlobal ? [{
       header: "Customer",
       render: (row: DebtRow) => (
         <div>
-          <Link href={`/customers/${row.customer.id}`} className="font-medium text-sm hover:underline">
+          <Link href={`/debts/${row.customer.id}`} className="font-medium text-sm hover:underline">
             {row.customer.name}
           </Link>
           {row.customer.phone && (
@@ -111,13 +129,14 @@ export function DebtTable({
       header: "Status",
       render: (row) => <StatusBadge status={row.status} />,
     },
-    {
+    // Di per-customer view: tombol Bayar per baris masih ada
+    ...(!isGlobal ? [{
       header: "",
-      className: "w-[100px] text-right",
-      render: (row) => (
+      className: "w-[80px] text-right",
+      render: (row: DebtRow) => (
         row.status !== "PAID" ? (
           <Button
-            variant="outline"
+            variant="ghost"
             size="sm"
             className="h-7 text-xs gap-1"
             onClick={() => setPayTarget({ id: row.customerId, name: row.customer.name })}
@@ -127,7 +146,7 @@ export function DebtTable({
           </Button>
         ) : null
       ),
-    },
+    }] : []),
   ]
 
   return (
@@ -158,6 +177,44 @@ export function DebtTable({
         </Select>
       </div>
 
+      {/* Di global view: tampilkan ringkasan per customer dengan tombol Bayar */}
+      {isGlobal && customerMap.size > 0 && (
+        <div className="rounded-lg border overflow-hidden">
+          <div className="bg-muted/50 px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+            Ringkasan per Customer
+          </div>
+          <div className="divide-y">
+            {Array.from(customerMap.values()).map((c) => (
+              <div key={c.id} className="flex items-center justify-between px-4 py-3 gap-3">
+                <div className="min-w-0">
+                  <Link href={`/debts/${c.id}`} className="font-medium text-sm hover:underline flex items-center gap-1.5">
+                    {c.name}
+                    <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                  </Link>
+                  {c.phone && <p className="text-xs text-muted-foreground">{c.phone}</p>}
+                </div>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right">
+                    <p className="text-xs text-muted-foreground">Total Hutang</p>
+                    <CurrencyDisplay amount={c.totalRemaining} className="text-sm font-bold text-red-600" />
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="gap-1.5 h-8"
+                    onClick={() => setPayTarget({ id: c.id, name: c.name })}
+                  >
+                    <Banknote className="h-3.5 w-3.5" />
+                    Bayar Hutang
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tabel detail per transaksi */}
       <DataTable
         columns={columns}
         data={data}
