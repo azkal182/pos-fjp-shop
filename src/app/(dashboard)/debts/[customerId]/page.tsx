@@ -1,14 +1,130 @@
-import type { Metadata } from "next"
-import { PlaceholderPage } from "@/components/shared/PlaceholderPage"
+"use client"
 
-export const metadata: Metadata = { title: "Hutang Customer" }
+import { useState, useEffect, useCallback } from "react"
+import { useParams, useRouter } from "next/navigation"
+import { ArrowLeft, ExternalLink } from "lucide-react"
+import Link from "next/link"
+import { Button } from "@/components/ui/button"
+import { PageWrapper } from "@/components/layout/PageWrapper"
+import { DebtTable } from "@/features/debts/components/DebtTable"
+import { CustomerDebtSummary } from "@/features/customers/components/CustomerDebtSummary"
+import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
+import { useToast } from "@/hooks/useToast"
+import type { PaginationMeta } from "@/types"
 
-export default function CustomerDebtPage() {
+interface Customer {
+  id: string
+  name: string
+  phone: string | null
+}
+
+interface DebtRow {
+  id: string
+  customerId: string
+  originalAmount: number
+  paidAmount: number
+  remainingAmount: number
+  status: string
+  debtDate: Date | string
+  aging: any
+  customer: { id: string; name: string; phone: string | null }
+  transaction: { code: string }
+}
+
+export default function CustomerDebtsPage() {
+  const params = useParams()
+  const router = useRouter()
+  const toast = useToast()
+  const customerId = params.customerId as string
+
+  const [customer, setCustomer] = useState<Customer | null>(null)
+  const [debts, setDebts] = useState<DebtRow[]>([])
+  const [meta, setMeta] = useState<PaginationMeta>({ page: 1, limit: 20, total: 0, totalPages: 0 })
+  const [isLoading, setIsLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [filters, setFilters] = useState({ search: "", status: "" })
+
+  // Fetch customer info
+  useEffect(() => {
+    fetch(`/api/customers/${customerId}`)
+      .then((r) => r.json())
+      .then((json) => setCustomer(json.data ? { id: json.data.id, name: json.data.name, phone: json.data.phone } : null))
+      .catch(() => router.push("/debts"))
+  }, [customerId]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchDebts = useCallback(async () => {
+    setIsLoading(true)
+    try {
+      const params = new URLSearchParams()
+      params.set("customerId", customerId)
+      params.set("page", String(page))
+      if (filters.status) params.set("status", filters.status)
+      const res = await fetch(`/api/debts?${params}`)
+      const json = await res.json()
+      setDebts(json.data ?? [])
+      setMeta(json.meta)
+    } catch {
+      toast.error("Gagal memuat hutang")
+    } finally {
+      setIsLoading(false)
+    }
+  }, [customerId, page, filters.status]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { fetchDebts() }, [fetchDebts])
+  useEffect(() => { setPage(1) }, [filters.status])
+
+  function setFilter(key: string, value: string) {
+    setFilters((prev) => ({ ...prev, [key]: value }))
+  }
+
+  if (!customer) return <LoadingSpinner centered />
+
   return (
-    <PlaceholderPage
-      title="Hutang Customer"
-      description="Daftar hutang per customer beserta riwayat pembayaran dan FIFO allocation preview."
-      sprint="Sprint 6"
-    />
+    <PageWrapper
+      title={`Hutang — ${customer.name}`}
+      actions={
+        <Button variant="outline" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4 mr-2" />
+          Kembali
+        </Button>
+      }
+    >
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Sidebar info */}
+        <div className="space-y-4">
+          <div className="rounded-lg border bg-card p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-semibold">{customer.name}</p>
+                {customer.phone && (
+                  <p className="text-sm text-muted-foreground">{customer.phone}</p>
+                )}
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+                <Link href={`/customers/${customerId}`}>
+                  <ExternalLink className="h-4 w-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+
+          <CustomerDebtSummary customerId={customerId} />
+        </div>
+
+        {/* Debt table */}
+        <div className="lg:col-span-2">
+          <DebtTable
+            data={debts}
+            meta={meta}
+            isLoading={isLoading}
+            isGlobal={false}
+            filters={filters}
+            onFilterChange={setFilter}
+            onPageChange={setPage}
+            onRefetch={fetchDebts}
+          />
+        </div>
+      </div>
+    </PageWrapper>
   )
 }
