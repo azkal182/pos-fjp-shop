@@ -151,8 +151,11 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
           min={1}
           placeholder="1"
           className="text-sm text-center"
-          value={Number(qty) || ""}
-          onChange={(e) => setValue(`items.${index}.quantity`, Number(e.target.value), { shouldValidate: true })}
+          value={qty > 0 ? qty : ""}
+          onChange={(e) => {
+            const val = e.target.value === "" ? 1 : parseInt(e.target.value, 10)
+            setValue(`items.${index}.quantity`, isNaN(val) ? 1 : val, { shouldValidate: true })
+          }}
           aria-invalid={!!itemErrors?.quantity}
         />
         {itemErrors?.quantity && (
@@ -169,8 +172,11 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
             min={0}
             placeholder="0"
             className="text-sm pl-7"
-            value={Number(buyPrice) || ""}
-            onChange={(e) => setValue(`items.${index}.buyPrice`, Number(e.target.value), { shouldValidate: true })}
+            value={buyPrice > 0 ? buyPrice : ""}
+            onChange={(e) => {
+              const val = e.target.value === "" ? 0 : parseFloat(e.target.value)
+              setValue(`items.${index}.buyPrice`, isNaN(val) ? 0 : val, { shouldValidate: true })
+            }}
             aria-invalid={!!itemErrors?.buyPrice}
           />
         </div>

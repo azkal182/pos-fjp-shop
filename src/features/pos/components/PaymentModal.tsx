@@ -76,29 +76,33 @@ export function PaymentModal({ open, onOpenChange, onConfirm, isSubmitting }: Pa
 
   const suggests = generateSuggests(total)
 
-  // Reset nominal ke 0 (kosong) saat modal dibuka
+  // Reset nominal ke 0 saat modal dibuka
   useEffect(() => {
-    if (open) setPaidAmount(0)
-  }, [open]) // eslint-disable-line react-hooks/exhaustive-deps
-
-  // Fetch FIFO preview saat overpay dan customer punya hutang lama
-  useEffect(() => {
-    if (!open) return
-    if (overpay > 0 && customerId && customerHasDebt) {
-      setIsLoadingPreview(true)
-      fetch("/api/debts/preview", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerId, amount: overpay }),
-      })
-        .then((r) => r.json())
-        .then((json) => setFifoPreview(json.data ?? null))
-        .catch(() => setFifoPreview(null))
-        .finally(() => setIsLoadingPreview(false))
-    } else {
+    if (open) {
+      setPaidAmount(0)
       setFifoPreview(null)
     }
-  }, [debouncedPaid, customerId, customerHasDebt, overpay, open])
+  }, [open, setPaidAmount])
+
+  // Fetch FIFO preview — satu useEffect dengan deps stabil
+  useEffect(() => {
+    if (!open || overpay <= 0 || !customerId || !customerHasDebt) {
+      setFifoPreview(null)
+      return
+    }
+    let cancelled = false
+    setIsLoadingPreview(true)
+    fetch("/api/debts/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customerId, amount: overpay }),
+    })
+      .then((r) => r.json())
+      .then((json) => { if (!cancelled) setFifoPreview(json.data ?? null) })
+      .catch(() => { if (!cancelled) setFifoPreview(null) })
+      .finally(() => { if (!cancelled) setIsLoadingPreview(false) })
+    return () => { cancelled = true }
+  }, [open, debouncedPaid, customerId, customerHasDebt, overpay])
 
   const canConfirm = !isSubmitting && paidAmount > 0 && !(walkIn && debt > 0)
 
