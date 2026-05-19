@@ -155,7 +155,7 @@ export function ProductForm({
                 type="number"
                 min={0}
                 placeholder="0"
-                {...register("buyPrice")}
+                {...register("buyPrice", { valueAsNumber: true })}
                 aria-invalid={!!errors.buyPrice}
               />
               {errors.buyPrice && <p className="text-xs text-destructive">{errors.buyPrice.message}</p>}
@@ -167,7 +167,7 @@ export function ProductForm({
                 type="number"
                 min={0}
                 placeholder="0"
-                {...register("sellPrice")}
+                {...register("sellPrice", { valueAsNumber: true })}
                 aria-invalid={!!errors.sellPrice}
               />
               {errors.sellPrice && <p className="text-xs text-destructive">{errors.sellPrice.message}</p>}
@@ -182,7 +182,7 @@ export function ProductForm({
               type="number"
               min={0}
               placeholder="0"
-              {...register("minStock")}
+              {...register("minStock", { valueAsNumber: true })}
               aria-invalid={!!errors.minStock}
             />
             {errors.minStock && <p className="text-xs text-destructive">{errors.minStock.message}</p>}
