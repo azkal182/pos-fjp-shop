@@ -4,6 +4,7 @@ import { PageWrapper } from "@/components/layout/PageWrapper"
 import { SalesCard } from "@/features/dashboard/components/SalesCard"
 import { SalesChart } from "@/features/dashboard/components/SalesChart"
 import { DebtSummaryCard } from "@/features/dashboard/components/DebtSummaryCard"
+import { VendorDebtCard } from "@/features/dashboard/components/VendorDebtCard"
 import { TopProductsTable } from "@/features/dashboard/components/TopProductsTable"
 import { LowStockAlert } from "@/features/dashboard/components/LowStockAlert"
 import { useDashboard } from "@/features/dashboard/hooks/useDashboard"
@@ -50,19 +51,29 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Row 2: Chart + Debt */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        <div className="lg:col-span-2">
+      {/* Row 2: Chart (6) + Piutang (3) + Hutang Vendor (3) */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-6">
           <SalesChart data={data?.salesChart ?? []} isLoading={isLoading} />
         </div>
-        <DebtSummaryCard
-          totalOutstanding={data?.totalOutstandingDebt ?? 0}
-          debtByAging={data?.debtByAging ?? []}
-          isLoading={isLoading}
-        />
+        <div className="lg:col-span-3">
+          <DebtSummaryCard
+            totalOutstanding={data?.totalOutstandingDebt ?? 0}
+            debtByAging={data?.debtByAging ?? []}
+            isLoading={isLoading}
+          />
+        </div>
+        <div className="lg:col-span-3">
+          <VendorDebtCard
+            totalOutstanding={data?.vendorDebtSummary.totalOutstanding ?? 0}
+            vendorCount={data?.vendorDebtSummary.vendorCount ?? 0}
+            topVendors={data?.vendorDebtSummary.topVendors ?? []}
+            isLoading={isLoading}
+          />
+        </div>
       </div>
 
-      {/* Row 3: Top products + Low stock */}
+      {/* Row 4: Top products + Low stock */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <TopProductsTable products={data?.topProducts ?? []} isLoading={isLoading} />
         <LowStockAlert products={data?.lowStockProducts ?? []} isLoading={isLoading} />

@@ -7,6 +7,11 @@ export interface DashboardData {
     monthRevenueChange: number
   }
   totalOutstandingDebt: number
+  vendorDebtSummary: {
+    totalOutstanding: number
+    vendorCount: number
+    topVendors: { vendorId: string; vendorName: string; totalOutstanding: number }[]
+  }
   lowStockProducts: { id: string; name: string; stock: number; minStock: number }[]
   salesChart: { date: string; revenue: number }[]
   topProducts: { productId: string; name: string; totalQty: number; totalRevenue: number }[]

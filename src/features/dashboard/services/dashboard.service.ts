@@ -23,6 +23,8 @@ export async function getDashboardData(): Promise<DashboardData> {
     monthAgg,
     prevMonthAgg,
     debtAgg,
+    vendorDebtAgg,
+    allVendors,
     lowStockProducts,
     chartData,
     topProductsRaw,
@@ -49,10 +51,22 @@ export async function getDashboardData(): Promise<DashboardData> {
       where: { paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: prevMonthStart, lte: prevMonthEnd } },
       _sum: { totalAmount: true },
     }),
-    // Total piutang outstanding
+    // Total piutang outstanding (customer)
     prisma.debt.aggregate({
       where: { status: { in: ["UNPAID", "PARTIAL"] } },
       _sum: { remainingAmount: true },
+    }),
+    // Hutang ke vendor outstanding
+    prisma.vendorDebt.groupBy({
+      by: ["vendorId"],
+      where: { status: { in: ["UNPAID", "PARTIAL"] } },
+      _sum: { remainingAmount: true },
+    }),
+    // Top 4 vendor dengan hutang terbesar + semua vendor aktif untuk padding
+    prisma.vendor.findMany({
+      where: { isActive: true },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
     }),
     // Produk stok rendah
     prisma.product.findMany({
@@ -113,6 +127,27 @@ export async function getDashboardData(): Promise<DashboardData> {
     totalRevenue: Number(p._sum.subtotal ?? 0),
   }))
 
+  // Build vendor debt map
+  const vendorDebtMap = new Map(
+    vendorDebtAgg.map((v) => [v.vendorId, Number(v._sum.remainingAmount ?? 0)])
+  )
+  const vendorNameMap = new Map(allVendors.map((v) => [v.id, v.name]))
+
+  // Top 4: vendor berpiutang diurutkan terbesar, sisanya diisi vendor tanpa hutang
+  const vendorsWithDebt = vendorDebtAgg
+    .map((v) => ({
+      vendorId: v.vendorId,
+      vendorName: vendorNameMap.get(v.vendorId) ?? "Unknown",
+      totalOutstanding: Number(v._sum.remainingAmount ?? 0),
+    }))
+    .sort((a, b) => b.totalOutstanding - a.totalOutstanding)
+
+  const vendorsWithoutDebt = allVendors
+    .filter((v) => !vendorDebtMap.has(v.id))
+    .map((v) => ({ vendorId: v.id, vendorName: v.name, totalOutstanding: 0 }))
+
+  const topVendors = [...vendorsWithDebt, ...vendorsWithoutDebt].slice(0, 4)
+
   return {
     salesSummary: {
       todayRevenue: Number(todayAgg._sum.totalAmount ?? 0),
@@ -122,6 +157,11 @@ export async function getDashboardData(): Promise<DashboardData> {
       monthRevenueChange,
     },
     totalOutstandingDebt: Number(debtAgg._sum.remainingAmount ?? 0),
+    vendorDebtSummary: {
+      totalOutstanding: vendorsWithDebt.reduce((s, v) => s + v.totalOutstanding, 0),
+      vendorCount: vendorsWithDebt.length,
+      topVendors,
+    },
     lowStockProducts,
     salesChart,
     topProducts,
