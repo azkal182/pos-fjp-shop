@@ -19,7 +19,7 @@ export async function getOrCreateAccount(partyType: PartyType, partyId: string, 
 export async function getAccountBalance(partyType: PartyType, partyId: string): Promise<number> {
   const lastEntry = await globalPrisma.ledgerEntry.findFirst({
     where: { account: { partyType, partyId } },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { runningBalance: true },
   })
   return Number(lastEntry?.runningBalance ?? 0)
@@ -46,9 +46,11 @@ export async function addEntry(params: AddEntryParams, db: TxClient = globalPris
   const account = await getOrCreateAccount(params.partyType, params.partyId, db)
 
   // Ambil running balance terakhir
+  // Gunakan [createdAt desc, id desc] sebagai tiebreaker agar deterministik
+  // ketika dua entry dibuat dalam satu transaksi dengan timestamp yang berdekatan.
   const lastEntry = await db.ledgerEntry.findFirst({
     where: { accountId: account.id },
-    orderBy: { createdAt: "desc" },
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     select: { runningBalance: true },
   })
   const currentBalance = Number(lastEntry?.runningBalance ?? 0)
@@ -129,7 +131,7 @@ export async function getLedger(partyType: PartyType, partyId: string, filter: L
   const [entries, totalEntries] = await Promise.all([
     globalPrisma.ledgerEntry.findMany({
       where,
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       skip: (page - 1) * limit,
       take: limit,
     }),
@@ -141,7 +143,47 @@ export async function getLedger(partyType: PartyType, partyId: string, filter: L
   return { entries, balance, totalEntries, totalDebit, totalCredit }
 }
 
-// ─── Adjustment (reverse entry) ───────────────────────────────────────────────
+// ─── Recalculate running balance ──────────────────────────────────────────────
+// Digunakan untuk memperbaiki data lama yang running balance-nya salah
+// akibat dua entry dibuat dengan createdAt identik dalam satu transaksi.
+
+export async function recalculateLedger(partyType: PartyType, partyId: string) {
+  const account = await globalPrisma.ledgerAccount.findUnique({
+    where: { partyType_partyId: { partyType, partyId } },
+  })
+  if (!account) return { fixed: 0 }
+
+  // Ambil semua entry diurutkan by createdAt asc, id asc (deterministik)
+  const entries = await globalPrisma.ledgerEntry.findMany({
+    where: { accountId: account.id },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  })
+
+  let runningBalance = 0
+  let fixed = 0
+
+  for (const entry of entries) {
+    const newBalance =
+      entry.direction === "DEBIT"
+        ? runningBalance + Number(entry.amount)
+        : runningBalance - Number(entry.amount)
+
+    if (Number(entry.runningBalance) !== newBalance) {
+      await globalPrisma.ledgerEntry.update({
+        where: { id: entry.id },
+        data: { runningBalance: newBalance },
+      })
+      fixed++
+    }
+
+    runningBalance = newBalance
+  }
+
+  log.info("[LEDGER]", "Recalculate done", { partyType, partyId, totalEntries: entries.length, fixed })
+  return { fixed, totalEntries: entries.length }
+}
+
+
 
 export async function addAdjustment(
   partyType: PartyType,

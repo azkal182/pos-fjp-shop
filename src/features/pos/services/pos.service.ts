@@ -22,6 +22,37 @@ export async function processCheckout(payload: CheckoutInput, userId: string) {
   const debtAmount = Math.max(0, totalAmount - effectivePaid)
   const overpayAmount = Math.max(0, effectivePaid - totalAmount)
 
+  // ── DEBUG: kalkulasi payment ──────────────────────────────────────────────
+  log.debug("[POS]", "Payment calculation", {
+    customerId: customerId ?? "walk-in",
+    itemCount: items.length,
+    items: items.map((i) => ({
+      productId: i.productId,
+      qty: i.quantity,
+      sellPrice: i.sellPrice,
+      discount: i.discountAmount,
+      subtotal: (i.sellPrice - i.discountAmount) * i.quantity,
+    })),
+    subtotal,
+    discountAmount,
+    totalAmount,
+    paidAmount,
+    depositUsed,
+    effectivePaid,
+    debtAmount,
+    overpayAmount,
+    paymentMethod,
+    overpayAction: overpayAmount > 0 ? overpayAction : "N/A",
+    case: effectivePaid === 0
+      ? "HUTANG_SEMUA"
+      : effectivePaid >= totalAmount && overpayAmount === 0
+      ? "LUNAS"
+      : effectivePaid > totalAmount
+      ? `OVERPAY (action=${overpayAction})`
+      : "PARTIAL",
+  })
+  // ─────────────────────────────────────────────────────────────────────────
+
   // 2. Validasi walk-in tidak boleh hutang
   if (!customerId && debtAmount > 0) {
     log.warn("[POS]", "Walk-in customer attempted debt payment", { totalAmount, paidAmount, debtAmount })
@@ -65,6 +96,8 @@ export async function processCheckout(payload: CheckoutInput, userId: string) {
       },
     })
 
+    log.debug("[POS]", "Transaction record created", { transactionId: trx.id, code, paymentStatus })
+
     // 6. Buat TransactionItems + decrement stok
     for (const item of items) {
       const product = await tx.product.findUniqueOrThrow({
@@ -107,6 +140,8 @@ export async function processCheckout(payload: CheckoutInput, userId: string) {
         createdBy: userId,
       }, tx)
 
+      log.debug("[POS]", "Ledger INVOICE entry created", { direction: "DEBIT", amount: totalAmount })
+
       // PAYMENT_IN CREDIT (uang tunai)
       if (paidAmount > 0) {
         await addEntry({
@@ -121,6 +156,8 @@ export async function processCheckout(payload: CheckoutInput, userId: string) {
           referenceId: trx.id,
           createdBy: userId,
         }, tx)
+
+        log.debug("[POS]", "Ledger PAYMENT_IN entry created", { direction: "CREDIT", amount: paidAmount })
       }
 
       // DEPOSIT_OUT DEBIT (deposit dipakai)
@@ -136,6 +173,8 @@ export async function processCheckout(payload: CheckoutInput, userId: string) {
           referenceId: trx.id,
           createdBy: userId,
         }, tx)
+
+        log.debug("[POS]", "Ledger DEPOSIT_OUT entry created", { direction: "DEBIT", amount: depositUsed })
       }
     }
 
@@ -150,6 +189,10 @@ export async function processCheckout(payload: CheckoutInput, userId: string) {
           status: effectivePaid === 0 ? "UNPAID" : "PARTIAL",
         },
       })
+      log.debug("[POS]", "Customer debt created", {
+        debtAmount,
+        status: effectivePaid === 0 ? "UNPAID" : "PARTIAL",
+      })
     }
 
     // 9. Handle overpay
@@ -158,10 +201,17 @@ export async function processCheckout(payload: CheckoutInput, userId: string) {
 
     if (overpayAmount > 0 && customerId) {
       const hasOldDebt = await hasOutstandingDebt(customerId)
+      log.debug("[POS]", "Overpay detected — checking old debt", {
+        overpayAmount,
+        hasOldDebt,
+        overpayAction,
+      })
+
       if (hasOldDebt) {
         // Alokasi ke hutang lama (FIFO)
         await allocatePaymentFifo(customerId, overpayAmount, trx.id, undefined, tx)
         finalChangeAmount = 0
+        log.debug("[POS]", "Overpay allocated to old debt (FIFO)", { overpayAmount })
       } else if (overpayAction === "deposit") {
         // Simpan sebagai deposit
         depositCreated = overpayAmount
@@ -187,12 +237,15 @@ export async function processCheckout(payload: CheckoutInput, userId: string) {
             sourceId: trx.id,
           },
         })
+        log.debug("[POS]", "Overpay saved as customer deposit", { depositCreated })
       } else {
         // Kembalikan tunai (default)
         finalChangeAmount = overpayAmount
+        log.debug("[POS]", "Overpay returned as change", { finalChangeAmount })
       }
     } else if (overpayAmount > 0) {
       finalChangeAmount = overpayAmount
+      log.debug("[POS]", "Walk-in overpay returned as change", { finalChangeAmount })
     }
 
     // 10. Update changeAmount + depositCreated
@@ -207,6 +260,7 @@ export async function processCheckout(payload: CheckoutInput, userId: string) {
       totalAmount,
       paidAmount,
       depositUsed,
+      effectivePaid,
       debtAmount,
       changeAmount: finalChangeAmount,
       depositCreated,

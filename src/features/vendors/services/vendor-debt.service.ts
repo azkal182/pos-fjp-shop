@@ -9,8 +9,10 @@ type TxClient = Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transa
 export async function getVendorOutstandingDebts(vendorId: string) {
   return globalPrisma.vendorDebt.findMany({
     where: { vendorId, status: { in: ["UNPAID", "PARTIAL"] } },
-    include: { purchase: { select: { code: true } } },
-    orderBy: { debtDate: "asc" },
+    include: { purchase: { select: { code: true, purchaseDate: true } } },
+    // FIFO: terlama dulu. Gunakan createdAt sebagai tiebreaker agar deterministik
+    // ketika beberapa PO punya debtDate yang sama (misal: pembelian di hari yang sama).
+    orderBy: [{ debtDate: "asc" }, { createdAt: "asc" }],
   })
 }
 
@@ -32,8 +34,8 @@ export async function hasVendorOutstandingDebt(vendorId: string): Promise<boolea
 export async function getVendorDebtSummary(vendorId: string) {
   const debts = await globalPrisma.vendorDebt.findMany({
     where: { vendorId, status: { in: ["UNPAID", "PARTIAL"] } },
-    include: { purchase: { select: { code: true } } },
-    orderBy: { debtDate: "asc" },
+    include: { purchase: { select: { code: true, purchaseDate: true } } },
+    orderBy: [{ debtDate: "asc" }, { createdAt: "asc" }],
   })
 
   const totalOutstanding = debts.reduce((s, d) => s + Number(d.remainingAmount), 0)

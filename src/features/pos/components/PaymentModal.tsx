@@ -135,7 +135,7 @@ export function PaymentModal({ open, onOpenChange, onConfirm, isSubmitting }: Pa
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-md max-w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Pembayaran</DialogTitle>
         </DialogHeader>

@@ -1,11 +1,12 @@
 "use client"
 
 import Link from "next/link"
+import Image from "next/image"
 import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, ShoppingCart, Package, Tag, Truck, ShoppingBag,
   ArrowLeftRight, Users, Receipt, CreditCard, BarChart2, Settings,
-  UserCog, Store, Building2,
+  UserCog, Building2,
 } from "lucide-react"
 import {
   Sidebar,
@@ -23,6 +24,7 @@ import {
 } from "@/components/ui/sidebar"
 import { navItems } from "@/config/nav.config"
 import { APP_NAME } from "@/config/app.config"
+import logoCircle from "@/assets/logo-circle.png"
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard, ShoppingCart, Package, Tag, Truck, ShoppingBag,
@@ -69,8 +71,16 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild tooltip={APP_NAME}>
               <Link href="/">
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-                  <Store className="size-4" />
+                {/* Logo circle — container putih agar transparan tetap terlihat */}
+                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-white dark:bg-zinc-900 border border-border/50 overflow-hidden p-0.5 shrink-0">
+                  <Image
+                    src={logoCircle}
+                    alt={APP_NAME}
+                    width={28}
+                    height={28}
+                    className="object-contain"
+                    priority
+                  />
                 </div>
                 <div className="flex flex-col gap-0.5 leading-none">
                   <span className="font-semibold text-sm">{APP_NAME}</span>

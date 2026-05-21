@@ -1,12 +1,14 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { TrendingDown, TrendingUp, Wallet } from "lucide-react"
+import { TrendingDown, TrendingUp, Wallet, RefreshCw } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
+import { useToast } from "@/hooks/useToast"
 
 interface LedgerEntry {
   id: string
@@ -41,15 +43,36 @@ const TYPE_LABELS: Record<string, string> = {
 export function VendorLedger({ vendorId, refreshKey }: { vendorId: string; refreshKey?: number }) {
   const [data, setData] = useState<LedgerData | null>(null)
   const [isLoading, setIsLoading] = useState(true)
+  const [isRecalculating, setIsRecalculating] = useState(false)
+  const toast = useToast()
 
-  useEffect(() => {
+  function fetchLedger() {
     setIsLoading(true)
     fetch(`/api/vendors/${vendorId}/ledger`)
       .then((r) => r.json())
       .then((json) => setData(json.data ?? null))
       .catch(() => {})
       .finally(() => setIsLoading(false))
-  }, [vendorId, refreshKey])
+  }
+
+  useEffect(() => {
+    fetchLedger()
+  }, [vendorId, refreshKey]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleRecalculate() {
+    setIsRecalculating(true)
+    try {
+      const res = await fetch(`/api/vendors/${vendorId}/ledger`, { method: "POST" })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Gagal recalculate")
+      toast.success(`Saldo diperbaiki: ${json.data.fixed} entry diperbarui`)
+      fetchLedger()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Terjadi kesalahan")
+    } finally {
+      setIsRecalculating(false)
+    }
+  }
 
   if (isLoading) {
     return (
@@ -80,20 +103,33 @@ export function VendorLedger({ vendorId, refreshKey }: { vendorId: string; refre
       <CardHeader className="pb-3">
         <div className="flex items-center justify-between">
           <CardTitle className="text-base">Buku Besar Vendor</CardTitle>
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground">
-              {isCredit ? "Kredit ke Vendor (Deposit)" : "Saldo Hutang"}
-            </p>
-            <CurrencyDisplay
-              amount={Math.abs(data.balance)}
-              className={`text-lg font-bold ${isCredit ? "text-blue-600" : data.balance > 0 ? "text-red-600" : "text-muted-foreground"}`}
-            />
-            {isCredit && (
-              <p className="text-xs text-blue-500 flex items-center gap-1 justify-end mt-0.5">
-                <Wallet className="h-3 w-3" />
-                Toko punya kredit ke vendor
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1 text-muted-foreground"
+              onClick={handleRecalculate}
+              disabled={isRecalculating}
+              title="Perbaiki running balance jika saldo tampak salah"
+            >
+              <RefreshCw className={`h-3 w-3 ${isRecalculating ? "animate-spin" : ""}`} />
+              {isRecalculating ? "Memperbaiki..." : "Perbaiki Saldo"}
+            </Button>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">
+                {isCredit ? "Kredit ke Vendor (Deposit)" : "Saldo Hutang"}
               </p>
-            )}
+              <CurrencyDisplay
+                amount={Math.abs(data.balance)}
+                className={`text-lg font-bold ${isCredit ? "text-blue-600" : data.balance > 0 ? "text-red-600" : "text-muted-foreground"}`}
+              />
+              {isCredit && (
+                <p className="text-xs text-blue-500 flex items-center gap-1 justify-end mt-0.5">
+                  <Wallet className="h-3 w-3" />
+                  Toko punya kredit ke vendor
+                </p>
+              )}
+            </div>
           </div>
         </div>
 

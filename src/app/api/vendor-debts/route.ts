@@ -23,7 +23,7 @@ export const GET = withHandler(async (req: NextRequest) => {
         vendor: { select: { id: true, name: true, phone: true } },
         purchase: { select: { code: true } },
       },
-      orderBy: { debtDate: "asc" },
+      orderBy: [{ debtDate: "asc" }, { createdAt: "asc" }],
       skip: (page - 1) * limit,
       take: limit,
     }),
