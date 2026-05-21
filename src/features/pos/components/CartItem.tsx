@@ -15,7 +15,7 @@ export function CartItem({ item }: CartItemProps) {
   const { updateQty, updateItemDiscount, removeItem } = useCartStore()
 
   return (
-    <div className="flex gap-3 px-4 py-3 hover:bg-muted/30 transition-colors group">
+    <div className="flex gap-3 px-3 py-3 sm:px-4 hover:bg-muted/30 transition-colors group">
       {/* Info produk */}
       <div className="flex-1 min-w-0 space-y-2">
         <div className="flex items-start justify-between gap-2">
@@ -32,7 +32,7 @@ export function CartItem({ item }: CartItemProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+            className="h-6 w-6 shrink-0 text-muted-foreground hover:text-destructive opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
             onClick={() => removeItem(item.productId)}
             aria-label="Hapus item"
           >
@@ -40,7 +40,7 @@ export function CartItem({ item }: CartItemProps) {
           </Button>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {/* Qty stepper */}
           <div className="flex items-center rounded-md border overflow-hidden">
             <Button
@@ -80,7 +80,7 @@ export function CartItem({ item }: CartItemProps) {
                 min={0}
                 value={item.discountAmount || ""}
                 onChange={(e) => updateItemDiscount(item.productId, Number(e.target.value))}
-                className="h-7 w-24 text-xs pl-7 pr-1"
+                className="h-7 w-20 sm:w-24 text-xs pl-7 pr-1"
                 placeholder="0"
               />
             </div>

@@ -14,6 +14,7 @@ export const GET = withHandler(async (req: NextRequest) => {
   const limit = Number(sp.get("limit") ?? 20)
   const search = sp.get("search") ?? undefined
   const categoryId = sp.get("categoryId") ?? undefined
+  const vendorId = sp.get("vendorId") ?? undefined
   const isActiveParam = sp.get("isActive")
   const isActive =
     isActiveParam === "true" ? true : isActiveParam === "false" ? false : undefined
@@ -22,6 +23,7 @@ export const GET = withHandler(async (req: NextRequest) => {
   const { data, meta } = await getAllProducts({
     search,
     categoryId,
+    vendorId,
     isActive,
     lowStock,
     page,

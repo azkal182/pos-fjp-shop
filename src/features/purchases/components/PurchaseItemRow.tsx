@@ -1,8 +1,8 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { Trash2, Package } from "lucide-react"
-import { useFormContext, useWatch } from "react-hook-form"
+import { Trash2, Package, Tag, AlertCircle } from "lucide-react"
+import { useFormContext } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
@@ -19,38 +19,51 @@ interface Product {
 interface PurchaseItemRowProps {
   index: number
   onRemove: () => void
+  vendorId?: string
 }
 
-export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
-  const { register, setValue, control, formState: { errors } } = useFormContext<CreatePurchaseInput>()
+export function PurchaseItemRow({ index, onRemove, vendorId }: PurchaseItemRowProps) {
+  const { register, setValue, watch, formState: { errors } } = useFormContext<CreatePurchaseInput>()
 
   const [products, setProducts] = useState<Product[]>([])
   const [search, setSearch] = useState("")
   const [showDropdown, setShowDropdown] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
+  const [catalogPrice, setCatalogPrice] = useState<number | null>(null)
   const [activeIndex, setActiveIndex] = useState(-1)
-  const searchInputRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
 
-  // useWatch hanya untuk kalkulasi subtotal — tidak menyebabkan re-render input
-  const qty = useWatch({ control, name: `items.${index}.quantity` }) ?? 1
-  const buyPrice = useWatch({ control, name: `items.${index}.buyPrice` }) ?? 0
+  // Baca nilai langsung dari watch (bukan useWatch) agar tidak trigger re-render parent
+  const qty = watch(`items.${index}.quantity`) ?? 1
+  const buyPrice = watch(`items.${index}.buyPrice`) ?? 0
   const subtotal = (Number(qty) || 0) * (Number(buyPrice) || 0)
 
   const itemErrors = (errors.items as any)?.[index]
+
+  async function fetchCatalogPrice(productId: string): Promise<number | null> {
+    if (!vendorId) return null
+    try {
+      const res = await fetch(`/api/products/${productId}/vendor-prices/${vendorId}`)
+      if (!res.ok) return null
+      const json = await res.json()
+      return json.data ? Number(json.data.buyPrice) : null
+    } catch { return null }
+  }
 
   useEffect(() => {
     if (!search.trim()) { setProducts([]); setActiveIndex(-1); return }
     const timer = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/products?search=${encodeURIComponent(search)}&isActive=true&limit=8`)
+        const params = new URLSearchParams({ search, isActive: "true", limit: "8" })
+        if (vendorId) params.set("vendorId", vendorId)
+        const res = await fetch(`/api/products?${params}`)
         const json = await res.json()
         setProducts(json.data ?? [])
         setActiveIndex(-1)
       } catch { setProducts([]) }
     }, 300)
     return () => clearTimeout(timer)
-  }, [search])
+  }, [search, vendorId])
 
   useEffect(() => {
     if (activeIndex >= 0 && listRef.current) {
@@ -59,14 +72,26 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
     }
   }, [activeIndex])
 
-  function selectProduct(product: Product) {
-    setSelectedProduct(product)
-    // setValue dengan shouldDirty agar form tahu nilai berubah
-    setValue(`items.${index}.productId`, product.id, { shouldDirty: true, shouldValidate: false })
-    setValue(`items.${index}.buyPrice`, product.buyPrice, { shouldDirty: true, shouldValidate: false })
-    setSearch(`${product.name}`)
+  async function selectProduct(product: Product) {
+    // Set search text dulu sebelum async call agar input langsung terisi
+    setSearch(product.name)
     setShowDropdown(false)
     setActiveIndex(-1)
+    setSelectedProduct(product)
+
+    // Set productId
+    setValue(`items.${index}.productId`, product.id, { shouldDirty: true, shouldValidate: false })
+
+    // Set harga default dulu (dari produk), lalu update jika ada catalog
+    setValue(`items.${index}.buyPrice`, product.buyPrice, { shouldDirty: true, shouldValidate: false })
+    setCatalogPrice(null)
+
+    // Fetch catalog price async — update jika ada
+    const catalog = await fetchCatalogPrice(product.id)
+    if (catalog !== null) {
+      setCatalogPrice(catalog)
+      setValue(`items.${index}.buyPrice`, catalog, { shouldDirty: true, shouldValidate: false })
+    }
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -86,12 +111,14 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
     }
   }
 
+  const isPriceFromCatalog = catalogPrice !== null && Number(buyPrice) === catalogPrice
+  const isPriceManual = catalogPrice !== null && Number(buyPrice) !== catalogPrice
+
   return (
     <div className="grid grid-cols-[1fr_72px_130px_90px_36px] gap-2 items-start">
-      {/* Produk search — uncontrolled, tidak pakai register */}
+      {/* Produk search */}
       <div className="relative">
         <Input
-          ref={searchInputRef}
           value={search}
           onChange={(e) => { setSearch(e.target.value); setShowDropdown(true) }}
           onFocus={() => search && setShowDropdown(true)}
@@ -103,6 +130,7 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
           aria-autocomplete="list"
           aria-expanded={showDropdown}
           role="combobox"
+          autoComplete="off"
         />
 
         {showDropdown && products.length > 0 && (
@@ -134,21 +162,37 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
           </div>
         )}
 
-        {/* Hidden input untuk productId — dikelola oleh RHF */}
+        {/* Hidden input untuk productId — dikelola via setValue */}
         <input type="hidden" {...register(`items.${index}.productId`)} />
 
         {itemErrors?.productId && (
           <p className="text-xs text-destructive mt-1">{itemErrors.productId.message}</p>
         )}
         {selectedProduct && (
-          <p className="text-xs text-muted-foreground mt-1">
-            HPP: <CurrencyDisplay amount={selectedProduct.buyPrice} className="text-xs" />
-            {" · "}{selectedProduct.unit}
-          </p>
+          <div className="flex items-center gap-1.5 mt-1">
+            {isPriceFromCatalog && (
+              <span className="inline-flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                <Tag className="h-3 w-3" />
+                Harga catalog
+              </span>
+            )}
+            {isPriceManual && (
+              <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
+                <AlertCircle className="h-3 w-3" />
+                Harga manual (catalog: <CurrencyDisplay amount={catalogPrice!} className="text-xs" />)
+              </span>
+            )}
+            {catalogPrice === null && (
+              <span className="text-xs text-muted-foreground">
+                HPP: <CurrencyDisplay amount={selectedProduct.buyPrice} className="text-xs" />
+                {" · "}{selectedProduct.unit}
+              </span>
+            )}
+          </div>
         )}
       </div>
 
-      {/* Qty — pakai register + valueAsNumber, tidak re-render saat field lain berubah */}
+      {/* Qty — pakai register biasa, tidak ada konflik */}
       <div>
         <Input
           type="number"
@@ -166,7 +210,7 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
         )}
       </div>
 
-      {/* Harga Beli — pakai register + valueAsNumber, tapi value dari useWatch agar update saat produk dipilih */}
+      {/* Harga Beli — pakai register saja, TANPA value prop agar tidak konflik */}
       <div>
         <div className="relative">
           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">
@@ -176,15 +220,9 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
             type="number"
             min={0}
             placeholder="0"
-            className="text-sm pl-7"
+            className={`text-sm pl-7 ${isPriceFromCatalog ? "border-green-400 dark:border-green-600" : ""}`}
             aria-invalid={!!itemErrors?.buyPrice}
-            // Gunakan value dari useWatch agar terupdate saat setValue dipanggil
-            value={Number(buyPrice) || ""}
             {...register(`items.${index}.buyPrice`, { valueAsNumber: true })}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value)
-              setValue(`items.${index}.buyPrice`, isNaN(val) ? 0 : val, { shouldDirty: true })
-            }}
           />
         </div>
         {itemErrors?.buyPrice && (
@@ -192,7 +230,7 @@ export function PurchaseItemRow({ index, onRemove }: PurchaseItemRowProps) {
         )}
       </div>
 
-      {/* Subtotal — hanya display, tidak ada input */}
+      {/* Subtotal */}
       <div className="flex items-center justify-end h-9">
         <CurrencyDisplay amount={subtotal} className="text-sm font-semibold" />
       </div>

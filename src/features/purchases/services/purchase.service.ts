@@ -4,6 +4,9 @@ import { log } from "@/lib/logger"
 import { generateCode } from "@/lib/utils"
 import { calculatePagination } from "@/lib/api-response"
 import { createMovement } from "@/features/stock-movements/services/stock-movement.service"
+import { updateAfterPurchase } from "@/features/products/services/product-vendor-price.service"
+import { addEntry } from "@/features/ledger/services/ledger.service"
+import { createDeposit } from "@/features/deposits/services/deposit.service"
 import type { CreatePurchaseInput, PriceChange } from "../schemas/purchase.schema"
 
 export interface PurchaseFilter {
@@ -33,6 +36,7 @@ export async function getAllPurchases(filter: PurchaseFilter = {}) {
       include: {
         vendor: { select: { id: true, name: true } },
         _count: { select: { items: true } },
+        vendorDebt: { select: { id: true, remainingAmount: true, status: true } },
       },
       orderBy: { purchaseDate: "desc" },
       skip: (page - 1) * limit,
@@ -103,18 +107,63 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
     0
   )
 
+  // Hitung payment amounts
+  // paidAmount undefined = tidak bayar sama sekali (semua jadi hutang)
+  // paidAmount 0        = sama, tidak bayar
+  // paidAmount > 0      = bayar sebagian atau lunas
+  const paidAmount = data.paidAmount ?? 0  // undefined → 0 (hutang semua)
+  const paymentMethod = data.paymentMethod ?? "CASH"
+  const debtAmount = Math.max(0, totalAmount - paidAmount)
+  const overpayAmount = Math.max(0, paidAmount - totalAmount)
+  const paymentStatus = paidAmount >= totalAmount ? "PAID" : paidAmount > 0 ? "PARTIAL" : "UNPAID"
+
+  // ── DEBUG: kalkulasi payment ──────────────────────────────────────────────
+  log.debug("[PURCHASE]", "Payment calculation", {
+    code,
+    vendor: vendor.name,
+    itemCount: data.items.length,
+    items: data.items.map((i) => ({
+      productId: i.productId,
+      qty: i.quantity,
+      buyPrice: i.buyPrice,
+      subtotal: i.quantity * i.buyPrice,
+    })),
+    totalAmount,
+    paidAmountInput: data.paidAmount,   // nilai asli dari input (bisa undefined)
+    paidAmountEffective: paidAmount,    // setelah ?? 0
+    debtAmount,
+    overpayAmount,
+    paymentStatus,
+    paymentMethod,
+    case: paidAmount === 0
+      ? "HUTANG_SEMUA"
+      : paidAmount >= totalAmount && overpayAmount === 0
+      ? "LUNAS"
+      : paidAmount > totalAmount
+      ? "OVERPAY"
+      : "PARTIAL",
+  })
+  // ─────────────────────────────────────────────────────────────────────────
+
   const purchase = await prisma.$transaction(async (tx) => {
-    // 1. Buat Purchase
+    // 1. Buat Purchase dengan payment info
     const purchase = await tx.purchase.create({
       data: {
         code,
         vendorId: data.vendorId,
         userId,
         totalAmount,
+        paidAmount,
+        changeAmount: overpayAmount,
+        debtAmount,
+        paymentStatus,
+        paymentMethod,
         notes: data.notes,
         purchaseDate: new Date(data.purchaseDate),
       },
     })
+
+    log.debug("[PURCHASE]", "Purchase record created", { purchaseId: purchase.id, code })
 
     // 2. Proses setiap item
     for (const item of data.items) {
@@ -125,7 +174,6 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
       const previousBuyPrice = Number(product.buyPrice)
       const priceChanged = previousBuyPrice !== item.buyPrice
 
-      // Buat PurchaseItem
       await tx.purchaseItem.create({
         data: {
           purchaseId: purchase.id,
@@ -138,7 +186,6 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
         },
       })
 
-      // Update stok via createMovement
       await createMovement(tx, {
         productId: item.productId,
         type: "PURCHASE_IN",
@@ -147,35 +194,147 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
         purchaseId: purchase.id,
       })
 
-      // Update harga beli jika dikonfirmasi
       if ((data.confirmedPriceUpdates ?? []).includes(item.productId)) {
         await tx.product.update({
           where: { id: item.productId },
           data: { buyPrice: item.buyPrice },
         })
-        log.warn("[PURCHASE]", "Buy price updated", {
-          productId: item.productId,
-          previousBuyPrice,
-          newBuyPrice: item.buyPrice,
-        })
+        log.warn("[PURCHASE]", "Buy price updated", { productId: item.productId, previousBuyPrice, newBuyPrice: item.buyPrice })
       } else if (priceChanged) {
-        log.warn("[PURCHASE]", "Price change detected but not confirmed", {
-          productId: item.productId,
-          previousBuyPrice,
-          newBuyPrice: item.buyPrice,
-        })
+        log.warn("[PURCHASE]", "Price change detected but not confirmed", { productId: item.productId, previousBuyPrice, newBuyPrice: item.buyPrice })
       }
+    }
+
+    // 3. LedgerEntry: INVOICE DEBIT (hutang toko ke vendor bertambah)
+    const invoiceDate = new Date(data.purchaseDate)
+    await addEntry({
+      partyType: "VENDOR",
+      partyId: data.vendorId,
+      type: "INVOICE",
+      direction: "DEBIT",
+      amount: totalAmount,
+      description: `PO ${code}`,
+      referenceType: "PURCHASE",
+      referenceId: purchase.id,
+      createdBy: userId,
+      createdAt: invoiceDate,
+    }, tx)
+
+    log.debug("[PURCHASE]", "Ledger INVOICE entry created", {
+      direction: "DEBIT",
+      amount: totalAmount,
+      description: `PO ${code}`,
+    })
+
+    // 4. LedgerEntry: PAYMENT_OUT CREDIT (toko bayar ke vendor)
+    // Beri offset +1ms agar createdAt tidak identik dengan INVOICE entry,
+    // sehingga orderBy createdAt deterministik saat query running balance.
+    if (paidAmount > 0) {
+      const paymentDate = new Date(invoiceDate.getTime() + 1)
+      await addEntry({
+        partyType: "VENDOR",
+        partyId: data.vendorId,
+        type: "PAYMENT_OUT",
+        direction: "CREDIT",
+        amount: paidAmount,
+        description: `Bayar PO ${code}`,
+        paymentMethod,
+        referenceType: "PURCHASE",
+        referenceId: purchase.id,
+        createdBy: userId,
+        createdAt: paymentDate,
+      }, tx)
+
+      log.debug("[PURCHASE]", "Ledger PAYMENT_OUT entry created", {
+        direction: "CREDIT",
+        amount: paidAmount,
+        paymentMethod,
+      })
+    } else {
+      log.debug("[PURCHASE]", "No payment — skipping PAYMENT_OUT ledger entry", {
+        reason: "paidAmount = 0 (hutang semua)",
+      })
+    }
+
+    // 5. Buat VendorDebt jika ada hutang
+    if (debtAmount > 0) {
+      await tx.vendorDebt.create({
+        data: {
+          vendorId: data.vendorId,
+          purchaseId: purchase.id,
+          originalAmount: debtAmount,
+          remainingAmount: debtAmount,
+          status: paidAmount === 0 ? "UNPAID" : "PARTIAL",
+          debtDate: new Date(data.purchaseDate),
+        },
+      })
+      log.debug("[PURCHASE]", "VendorDebt record created", {
+        debtAmount,
+        status: paidAmount === 0 ? "UNPAID" : "PARTIAL",
+      })
+    } else {
+      log.debug("[PURCHASE]", "No debt — skipping VendorDebt creation", {
+        reason: "debtAmount = 0 (lunas atau overpay)",
+      })
+    }
+
+    // 6. Jika overpay → otomatis jadi deposit vendor (DEPOSIT_IN CREDIT)
+    if (overpayAmount > 0) {
+      // +2ms dari invoiceDate agar urutan entry tetap deterministik
+      const depositDate = new Date(invoiceDate.getTime() + 2)
+      await addEntry({
+        partyType: "VENDOR",
+        partyId: data.vendorId,
+        type: "DEPOSIT_IN",
+        direction: "CREDIT",
+        amount: overpayAmount,
+        description: `Deposit dari kelebihan bayar PO ${code}`,
+        referenceType: "PURCHASE",
+        referenceId: purchase.id,
+        createdBy: userId,
+        createdAt: depositDate,
+      }, tx)
+
+      // Buat Deposit record untuk vendor
+      await tx.deposit.create({
+        data: {
+          partyType: "VENDOR",
+          partyId: data.vendorId,
+          amount: overpayAmount,
+          balance: overpayAmount,
+          source: "OVERPAY_PURCHASE",
+          sourceId: purchase.id,
+          notes: `Kelebihan bayar PO ${code}`,
+        },
+      })
+
+      log.debug("[PURCHASE]", "Overpay → vendor deposit created", {
+        overpayAmount,
+        depositSource: "OVERPAY_PURCHASE",
+      })
     }
 
     return purchase
   })
 
+  // ── INFO: ringkasan akhir ─────────────────────────────────────────────────
   log.info("[PURCHASE]", "Purchase created", {
     code,
-    vendorId: data.vendorId,
+    vendor: vendor.name,
     itemCount: data.items.length,
     totalAmount,
+    paidAmount,
+    debtAmount,
+    overpayAmount,
+    paymentStatus,
   })
+  // ─────────────────────────────────────────────────────────────────────────
+
+  // Update ProductVendorPrice catalog setelah PO selesai
+  const purchaseDate = new Date(data.purchaseDate)
+  for (const item of data.items) {
+    await updateAfterPurchase(item.productId, data.vendorId, item.buyPrice, purchaseDate)
+  }
 
   return getPurchaseById(purchase.id)
 }

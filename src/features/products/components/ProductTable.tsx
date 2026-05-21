@@ -28,15 +28,22 @@ interface Category {
   name: string
 }
 
+interface Vendor {
+  id: string
+  name: string
+}
+
 interface ProductTableProps {
   data: ProductWithCategory[]
   meta: PaginationMeta
   isLoading?: boolean
   categories: Category[]
+  vendors?: Vendor[]
   filters: {
     search: string
     categoryId: string
     isActive: string
+    vendorId?: string
   }
   onFilterChange: (key: string, value: string) => void
   onPageChange: (page: number) => void
@@ -48,6 +55,7 @@ export function ProductTable({
   meta,
   isLoading,
   categories,
+  vendors = [],
   filters,
   onFilterChange,
   onPageChange,
@@ -196,6 +204,22 @@ export function ProductTable({
             ))}
           </SelectContent>
         </Select>
+        {vendors.length > 0 && (
+          <Select
+            value={filters.vendorId || "all"}
+            onValueChange={(v) => onFilterChange("vendorId", v === "all" ? "" : v)}
+          >
+            <SelectTrigger className="w-44">
+              <SelectValue placeholder="Semua Vendor" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Semua Vendor</SelectItem>
+              {vendors.map((v) => (
+                <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
         <Select
           value={filters.isActive || "all"}
           onValueChange={(v) => onFilterChange("isActive", v === "all" ? "" : v)}

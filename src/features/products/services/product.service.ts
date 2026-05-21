@@ -6,7 +6,7 @@ import type { CreateProductInput, UpdateProductInput } from "../schemas/product.
 import type { ProductListFilter } from "../types/product.types"
 
 export async function getAllProducts(filter: ProductListFilter = {}) {
-  const { search, categoryId, isActive, lowStock, page = 1, limit = 20 } = filter
+  const { search, categoryId, vendorId, isActive, lowStock, page = 1, limit = 20 } = filter
 
   const where = {
     ...(search && {
@@ -17,6 +17,10 @@ export async function getAllProducts(filter: ProductListFilter = {}) {
     }),
     ...(categoryId && { categoryId }),
     ...(isActive !== undefined && { isActive }),
+    // Filter by vendor via ProductVendorPrice
+    ...(vendorId && {
+      vendorPrices: { some: { vendorId } },
+    }),
   }
 
   // lowStock filter: stock <= minStock — handled post-query for Prisma field comparison

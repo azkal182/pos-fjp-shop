@@ -10,6 +10,7 @@ import { PageWrapper } from "@/components/layout/PageWrapper"
 import { DebtTable } from "@/features/debts/components/DebtTable"
 import { CustomerDebtSummary } from "@/features/customers/components/CustomerDebtSummary"
 import { CustomerLedger } from "@/features/debts/components/CustomerLedger"
+import { DepositCard } from "@/features/deposits/components/DepositCard"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
 import { useToast } from "@/hooks/useToast"
 import type { PaginationMeta } from "@/types"
@@ -116,6 +117,7 @@ export default function CustomerDebtsPage() {
           </div>
 
           <CustomerDebtSummary customerId={customerId} />
+          <DepositCard partyType="CUSTOMER" partyId={customerId} refreshKey={ledgerRefreshKey} />
         </div>
 
         {/* Main content */}

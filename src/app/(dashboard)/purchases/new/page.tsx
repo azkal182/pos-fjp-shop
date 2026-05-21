@@ -1,6 +1,6 @@
 "use client"
 
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageWrapper } from "@/components/layout/PageWrapper"
@@ -10,6 +10,8 @@ import { useToast } from "@/hooks/useToast"
 export default function NewPurchasePage() {
   const router = useRouter()
   const toast = useToast()
+  const searchParams = useSearchParams()
+  const defaultVendorId = searchParams.get("vendorId") ?? undefined
 
   async function handleSuccess() {
     toast.success("Pembelian berhasil disimpan. Stok telah diperbarui.")
@@ -26,7 +28,7 @@ export default function NewPurchasePage() {
         </Button>
       }
     >
-      <PurchaseForm onSuccess={handleSuccess} />
+      <PurchaseForm onSuccess={handleSuccess} defaultVendorId={defaultVendorId} />
     </PageWrapper>
   )
 }

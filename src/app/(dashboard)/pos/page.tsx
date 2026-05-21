@@ -80,7 +80,7 @@ export default function POSPage() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload)
   }, [items.length])
 
-  async function handleCheckout() {
+  async function handleCheckout(opts: { overpayAction: "return" | "deposit"; depositUsed: number; depositId?: string }) {
     setIsSubmitting(true)
     try {
       const payload = {
@@ -94,6 +94,9 @@ export default function POSPage() {
         paidAmount,
         paymentMethod,
         discountAmount,
+        overpayAction: opts.overpayAction,
+        depositUsed: opts.depositUsed,
+        depositId: opts.depositId,
       }
       const res = await fetch("/api/transactions", {
         method: "POST",

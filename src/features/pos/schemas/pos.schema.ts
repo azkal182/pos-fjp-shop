@@ -14,6 +14,9 @@ export const checkoutSchema = z.object({
   paymentMethod: z.enum(["CASH", "TRANSFER"]),
   discountAmount: z.number().min(0),
   notes: z.string().optional(),
+  overpayAction: z.enum(["return", "deposit"]).optional(), // apa yang dilakukan dengan kelebihan bayar
+  depositUsed: z.number().min(0).optional(), // deposit yang dipakai
+  depositId: z.string().optional(), // id deposit yang dipakai
 })
 
 export type CheckoutInput = z.infer<typeof checkoutSchema>

@@ -7,6 +7,7 @@ export type ProductWithCategory = Product & {
 export interface ProductListFilter {
   search?: string
   categoryId?: string
+  vendorId?: string
   isActive?: boolean
   lowStock?: boolean
   page?: number

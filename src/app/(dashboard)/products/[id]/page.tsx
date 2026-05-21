@@ -6,9 +6,11 @@ import { ArrowLeft, Pencil, Package } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageWrapper } from "@/components/layout/PageWrapper"
 import { StockBadge } from "@/features/products/components/StockBadge"
 import { ProductForm } from "@/features/products/components/ProductForm"
+import { ProductVendorPrices } from "@/features/products/components/ProductVendorPrices"
 import { DataTable, type Column } from "@/components/shared/DataTable"
 import { StatusBadge } from "@/components/shared/StatusBadge"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
@@ -228,21 +230,39 @@ export default function ProductDetailPage() {
 
         {/* Riwayat Stok */}
         <div className="lg:col-span-2">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Riwayat Pergerakan Stok</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <DataTable
-                columns={movementColumns}
-                data={movements}
-                isLoading={isMovementsLoading}
-                emptyMessage="Belum ada pergerakan stok"
-                emptyDescription="Stok akan tercatat saat ada pembelian atau penjualan"
-                keyExtractor={(row) => row.id}
-              />
-            </CardContent>
-          </Card>
+          <Tabs defaultValue="movements">
+            <TabsList>
+              <TabsTrigger value="movements">Pergerakan Stok</TabsTrigger>
+              <TabsTrigger value="vendors">Vendor & Harga</TabsTrigger>
+            </TabsList>
+            <TabsContent value="movements" className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Riwayat Pergerakan Stok</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <DataTable
+                    columns={movementColumns}
+                    data={movements}
+                    isLoading={isMovementsLoading}
+                    emptyMessage="Belum ada pergerakan stok"
+                    emptyDescription="Stok akan tercatat saat ada pembelian atau penjualan"
+                    keyExtractor={(row) => row.id}
+                  />
+                </CardContent>
+              </Card>
+            </TabsContent>
+            <TabsContent value="vendors" className="mt-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-base">Vendor & Harga Beli</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <ProductVendorPrices productId={id} />
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
 
