@@ -353,6 +353,10 @@ async function main() {
                     subtotal, discountAmount, totalAmount, paidAmount,
                     changeAmount: overpayAmount > 0 ? overpayAmount : 0,
                     debtAmount, paymentMethod, paymentStatus,
+                    // Semua transaksi seed langsung CONFIRMED
+                    confirmationStatus: "CONFIRMED",
+                    confirmedAt: date,
+                    confirmedBy: userId,
                     notes: notes ?? null, transactionDate: date,
                 },
             })
