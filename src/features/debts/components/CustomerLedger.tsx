@@ -60,7 +60,7 @@ export function CustomerLedger({ customerId, refreshKey }: CustomerLedgerProps) 
     )
   }
 
-  if (!data || data.ledger.length === 0) {
+  if (!data || !data.ledger || data.ledger.length === 0) {
     return (
       <Card>
         <CardHeader><CardTitle className="text-base">Buku Hutang</CardTitle></CardHeader>
