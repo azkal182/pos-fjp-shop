@@ -2,14 +2,11 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Printer, FileDown, Loader2 } from "lucide-react"
+import { ArrowLeft, Printer } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageWrapper } from "@/components/layout/PageWrapper"
 import { TransactionDetail } from "@/features/transactions/components/TransactionDetail"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
-import { usePdfExport } from "@/lib/pdf/usePdfExport"
-import { TransactionPdf } from "@/features/transactions/pdf/TransactionPdf"
-import { useSettingsStore } from "@/stores/settings.store"
 
 export default function TransactionDetailPage() {
   const params = useParams()
@@ -18,10 +15,6 @@ export default function TransactionDetailPage() {
 
   const [transaction, setTransaction] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const { exportPdf, isGenerating } = usePdfExport()
-  const { store, load } = useSettingsStore()
-
-  useEffect(() => { load() }, [load])
 
   useEffect(() => {
     fetch(`/api/transactions/${id}`)
@@ -37,21 +30,7 @@ export default function TransactionDetailPage() {
   const isConfirmed = transaction.confirmationStatus === "CONFIRMED"
 
   function handlePrintReceipt() {
-    // Buka halaman print di tab baru — bersih tanpa dashboard
     window.open(`/print/receipt/${id}`, "_blank", "noopener,noreferrer")
-  }
-
-  async function handleExportPdf() {
-    await exportPdf(
-      <TransactionPdf
-        transaction={transaction}
-        storeName={store.storeName || "FJP Shop"}
-        storeAddress={store.storeAddress}
-        storePhone={store.storePhone}
-        storeReceiptNote={store.receiptNote}
-      />,
-      `invoice-${transaction.code}.pdf`
-    )
   }
 
   return (
@@ -63,16 +42,10 @@ export default function TransactionDetailPage() {
             Kembali
           </Button>
           {isConfirmed && (
-            <>
-              <Button variant="outline" onClick={handlePrintReceipt}>
-                <Printer className="h-4 w-4 mr-2" />
-                Print Nota
-              </Button>
-              <Button variant="outline" onClick={handleExportPdf} disabled={isGenerating} className="gap-2">
-                {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
-                Export PDF
-              </Button>
-            </>
+            <Button variant="outline" onClick={handlePrintReceipt}>
+              <Printer className="h-4 w-4 mr-2" />
+              Print Nota
+            </Button>
           )}
         </div>
       }

@@ -24,6 +24,9 @@ export function ThermalReceipt({
   receiptWidth = "80mm",
 }: ThermalReceiptProps) {
   useEffect(() => {
+    // Tambah class ke body agar CSS print layout aktif
+    document.body.classList.add("print-page")
+
     // Set CSS variable untuk lebar tombol aksi di screen
     document.documentElement.style.setProperty("--receipt-width", receiptWidth)
 
@@ -52,6 +55,10 @@ export function ThermalReceipt({
         if (img.complete) tryPrint()
         else { img.onload = tryPrint; img.onerror = tryPrint }
       })
+    }
+
+    return () => {
+      document.body.classList.remove("print-page")
     }
   }, [receiptWidth])
 
