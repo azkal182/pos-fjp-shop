@@ -2,8 +2,8 @@
 
 /**
  * ReceiptContent — pure render nota thermal.
- * Tidak ada auto-print, tidak ada tombol aksi.
- * Dipakai oleh ThermalReceipt (halaman print) dan ReceiptPreview (settings).
+ * Layout berbasis CSS flexbox, bukan char-counting.
+ * Kompatibel dengan semua lebar printer thermal (58mm / 80mm).
  */
 
 import { format } from "date-fns"
@@ -50,7 +50,7 @@ export interface ReceiptContentProps {
 
 function formatRp(amount: number | string): string {
   const num = typeof amount === "string" ? parseFloat(amount) : amount
-  return `Rp ${num.toLocaleString("id-ID")}`
+  return `Rp\u00a0${num.toLocaleString("id-ID")}`
 }
 
 function toNum(v: number | string): number {
@@ -66,199 +66,227 @@ export function ReceiptContent({
   const date = new Date(transaction.transactionDate)
   const dateStr = format(date, "dd/MM/yyyy HH:mm", { locale: idLocale })
 
-  const subtotal = toNum(transaction.subtotal)
-  const discount = toNum(transaction.discountAmount)
-  const packing = toNum(transaction.packingFee ?? 0)
-  const total = toNum(transaction.totalAmount)
-  const paid = toNum(transaction.paidAmount)
-  const change = toNum(transaction.changeAmount)
-  const debt = toNum(transaction.debtAmount)
+  const subtotal  = toNum(transaction.subtotal)
+  const discount  = toNum(transaction.discountAmount)
+  const packing   = toNum(transaction.packingFee ?? 0)
+  const total     = toNum(transaction.totalAmount)
+  const paid      = toNum(transaction.paidAmount)
+  const change    = toNum(transaction.changeAmount)
+  const debt      = toNum(transaction.debtAmount)
 
   const paymentLabel = transaction.paymentMethod === "CASH" ? "Tunai" : "Transfer"
-  const statusLabel =
-    transaction.paymentStatus === "PAID"
-      ? "LUNAS"
-      : transaction.paymentStatus === "PARTIAL"
-      ? "SEBAGIAN"
-      : "HUTANG"
+  const statusLabel  =
+    transaction.paymentStatus === "PAID"    ? "LUNAS"
+    : transaction.paymentStatus === "PARTIAL" ? "SEBAGIAN"
+    : "HUTANG"
 
-  const charWidth = receiptWidth === "58mm" ? 32 : 48
-  const fontSize = receiptWidth === "58mm" ? "10px" : "11px"
+  const is58 = receiptWidth === "58mm"
+  const fs   = is58 ? "10px" : "11px"
+  const fsXs = is58 ? "9px"  : "10px"
+  const fsSm = is58 ? "11px" : "12px"
 
-  function line(char = "-") {
-    return char.repeat(charWidth)
+  // ── Shared styles ──────────────────────────────────────────────
+  const base: React.CSSProperties = {
+    fontFamily: "'Courier New', Courier, monospace",
+    fontSize: fs,
+    lineHeight: "1.5",
+    color: "#000",
+    margin: 0,
+    padding: 0,
   }
 
-  function twoCol(left: string, right: string, width = charWidth): string {
-    const maxLeft = width - right.length - 1
-    const l = left.length > maxLeft ? left.slice(0, maxLeft - 1) + "…" : left
-    const spaces = width - l.length - right.length
-    return l + " ".repeat(Math.max(1, spaces)) + right
+  const wrapper: React.CSSProperties = {
+    ...base,
+    width: "100%",
+    maxWidth: receiptWidth,
+    padding: "6px 8px",
+    background: "#fff",
+    boxSizing: "border-box",
   }
 
-  const s: Record<string, React.CSSProperties> = {
-    wrapper: {
-      width: receiptWidth,
-      maxWidth: receiptWidth,
-      fontFamily: "'Courier New', Courier, monospace",
-      fontSize,
-      lineHeight: "1.4",
-      color: "#000",
-      padding: "8px 6px",
-      background: "#fff",
-    },
-    bold: { fontWeight: "bold" },
-    pre: {
-      fontFamily: "inherit",
-      fontSize: "inherit",
-      whiteSpace: "pre-wrap",
-      wordBreak: "break-all",
-      margin: 0,
-    },
-    logo: {
-      display: "block",
-      maxWidth: "60%",
-      maxHeight: "48px",
-      margin: "0 auto 4px",
-      objectFit: "contain" as const,
-    },
-    statusBadge: {
-      display: "inline-block",
-      border: "1px solid #000",
-      padding: "1px 6px",
-      fontSize: "10px",
-      fontWeight: "bold",
-      letterSpacing: "1px",
-    },
-    row: { display: "flex", justifyContent: "space-between" },
-    totalRow: {
-      display: "flex",
-      justifyContent: "space-between",
-      fontWeight: "bold",
-      fontSize: receiptWidth === "58mm" ? "11px" : "12px",
-      borderTop: "1px solid #000",
-      paddingTop: "2px",
-      marginTop: "2px",
-    },
-    note: {
-      textAlign: "center" as const,
-      fontSize: receiptWidth === "58mm" ? "9px" : "10px",
-      marginTop: "4px",
-    },
+  // Separator: border CSS, bukan char repeat
+  const sep = (style: "solid" | "dashed" = "solid"): React.CSSProperties => ({
+    borderTop: `1px ${style} #000`,
+    margin: "4px 0",
+  })
+
+  // Row kiri-kanan dengan flexbox
+  const row: React.CSSProperties = {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "baseline",
+    gap: "4px",
+    fontSize: fs,
+    lineHeight: "1.5",
+  }
+
+  const rowLabel: React.CSSProperties = {
+    whiteSpace: "nowrap",
+    flexShrink: 0,
+  }
+
+  const rowValue: React.CSSProperties = {
+    textAlign: "right",
+    wordBreak: "break-word",
   }
 
   return (
-    <div style={s.wrapper}>
-      {/* Logo */}
+    <div style={wrapper}>
+
+      {/* ── Logo ── */}
       {logoUrl && (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={logoUrl} alt="Logo" style={s.logo} />
+        <img
+          src={logoUrl}
+          alt="Logo"
+          style={{
+            display: "block",
+            maxWidth: "55%",
+            maxHeight: "52px",
+            margin: "0 auto 4px",
+            objectFit: "contain",
+          }}
+        />
       )}
 
-      {/* Header toko */}
+      {/* ── Header toko ── */}
       <div style={{ textAlign: "center", marginBottom: "4px" }}>
-        <div style={{ ...s.bold, fontSize: receiptWidth === "58mm" ? "12px" : "14px" }}>
+        <div style={{ fontWeight: "bold", fontSize: is58 ? "12px" : "14px" }}>
           {storeSettings.storeName}
         </div>
         {storeSettings.storeAddress && (
-          <div style={{ fontSize: receiptWidth === "58mm" ? "9px" : "10px", marginTop: "1px" }}>
+          <div style={{ fontSize: fsXs, marginTop: "1px" }}>
             {storeSettings.storeAddress}
           </div>
         )}
         {storeSettings.storePhone && (
-          <div style={{ fontSize: receiptWidth === "58mm" ? "9px" : "10px" }}>
+          <div style={{ fontSize: fsXs }}>
             Telp: {storeSettings.storePhone}
           </div>
         )}
       </div>
 
-      <pre style={s.pre}>{line("=")}</pre>
+      <div style={sep("solid")} />
 
-      {/* Info transaksi */}
-      <pre style={s.pre}>{twoCol("No:", transaction.code)}</pre>
-      <pre style={s.pre}>{twoCol("Tgl:", dateStr)}</pre>
-      <pre style={s.pre}>{twoCol("Kasir:", transaction.user.name)}</pre>
+      {/* ── Info transaksi ── */}
+      <div style={{ ...row }}><span style={rowLabel}>No</span><span style={rowValue}>{transaction.code}</span></div>
+      <div style={{ ...row }}><span style={rowLabel}>Tgl</span><span style={rowValue}>{dateStr}</span></div>
+      <div style={{ ...row }}><span style={rowLabel}>Kasir</span><span style={rowValue}>{transaction.user.name}</span></div>
       {transaction.customer && (
-        <pre style={s.pre}>{twoCol("Customer:", transaction.customer.name)}</pre>
+        <div style={{ ...row }}><span style={rowLabel}>Customer</span><span style={rowValue}>{transaction.customer.name}</span></div>
       )}
 
-      <pre style={s.pre}>{line("-")}</pre>
+      <div style={sep("dashed")} />
 
-      {/* Items */}
+      {/* ── Items ── */}
       {transaction.items.map((item) => {
         const itemDisc = toNum(item.discountAmount)
-        const price = toNum(item.sellPrice)
-        const sub = toNum(item.subtotal)
+        const price    = toNum(item.sellPrice)
+        const sub      = toNum(item.subtotal)
         return (
-          <div key={item.id} style={{ marginBottom: "3px" }}>
-            <div style={s.bold}>{item.productName}</div>
-            <div style={s.row}>
-              <span>
-                {item.quantity} × {formatRp(price)}
-                {itemDisc > 0 && ` (-${formatRp(itemDisc)})`}
+          <div key={item.id} style={{ marginBottom: "4px" }}>
+            <div style={{ fontWeight: "bold", fontSize: fs, wordBreak: "break-word" }}>
+              {item.productName}
+            </div>
+            <div style={row}>
+              <span style={{ ...rowLabel, fontWeight: "normal", fontSize: fsXs }}>
+                {item.quantity}&nbsp;×&nbsp;{formatRp(price)}
+                {itemDisc > 0 && <>&nbsp;(-{formatRp(itemDisc)})</>}
               </span>
-              <span style={s.bold}>{formatRp(sub)}</span>
+              <span style={{ ...rowValue, fontWeight: "bold" }}>{formatRp(sub)}</span>
             </div>
           </div>
         )
       })}
 
-      <pre style={s.pre}>{line("-")}</pre>
+      <div style={sep("dashed")} />
 
-      {/* Summary */}
+      {/* ── Summary ── */}
       {discount > 0 && (
         <>
-          <div style={s.row}><span>Subtotal</span><span>{formatRp(subtotal + discount)}</span></div>
-          <div style={s.row}><span>Diskon</span><span>-{formatRp(discount)}</span></div>
+          <div style={row}>
+            <span style={rowLabel}>Subtotal</span>
+            <span style={rowValue}>{formatRp(subtotal + discount)}</span>
+          </div>
+          <div style={row}>
+            <span style={rowLabel}>Diskon</span>
+            <span style={rowValue}>-{formatRp(discount)}</span>
+          </div>
         </>
       )}
       {packing > 0 && (
-        <div style={s.row}><span>Biaya Packing</span><span>+{formatRp(packing)}</span></div>
+        <div style={row}>
+          <span style={rowLabel}>Biaya Packing</span>
+          <span style={rowValue}>+{formatRp(packing)}</span>
+        </div>
       )}
 
-      <div style={s.totalRow}>
+      {/* Total — lebih tebal */}
+      <div style={{
+        ...row,
+        fontWeight: "bold",
+        fontSize: fsSm,
+        borderTop: "1.5px solid #000",
+        borderBottom: "1.5px solid #000",
+        padding: "3px 0",
+        margin: "3px 0",
+      }}>
         <span>TOTAL</span>
         <span>{formatRp(total)}</span>
       </div>
 
-      <pre style={s.pre}>{line("-")}</pre>
-
-      <div style={s.row}>
-        <span>Bayar ({paymentLabel})</span>
-        <span>{formatRp(paid)}</span>
+      {/* ── Pembayaran ── */}
+      <div style={row}>
+        <span style={rowLabel}>Bayar ({paymentLabel})</span>
+        <span style={rowValue}>{formatRp(paid)}</span>
       </div>
       {change > 0 && (
-        <div style={{ ...s.row, fontWeight: "bold" }}>
-          <span>Kembalian</span><span>{formatRp(change)}</span>
+        <div style={{ ...row, fontWeight: "bold" }}>
+          <span style={rowLabel}>Kembalian</span>
+          <span style={rowValue}>{formatRp(change)}</span>
         </div>
       )}
       {debt > 0 && (
-        <div style={{ ...s.row, fontWeight: "bold" }}>
-          <span>Hutang</span><span>{formatRp(debt)}</span>
+        <div style={{ ...row, fontWeight: "bold" }}>
+          <span style={rowLabel}>Hutang</span>
+          <span style={rowValue}>{formatRp(debt)}</span>
         </div>
       )}
 
-      <pre style={s.pre}>{line("=")}</pre>
+      <div style={sep("solid")} />
 
-      {/* Status */}
-      <div style={{ textAlign: "center", margin: "4px 0" }}>
-        <span style={s.statusBadge}>[ {statusLabel} ]</span>
+      {/* ── Status badge ── */}
+      <div style={{ textAlign: "center", margin: "5px 0" }}>
+        <span style={{
+          display: "inline-block",
+          border: "1.5px solid #000",
+          padding: "2px 10px",
+          fontSize: fs,
+          fontWeight: "bold",
+          letterSpacing: "1.5px",
+        }}>
+          [ {statusLabel} ]
+        </span>
       </div>
 
-      {/* Catatan */}
+      {/* ── Catatan struk ── */}
       {storeSettings.receiptNote && (
-        <div style={s.note}>{storeSettings.receiptNote}</div>
+        <div style={{ textAlign: "center", fontSize: fsXs, marginTop: "4px", lineHeight: "1.4" }}>
+          {storeSettings.receiptNote}
+        </div>
       )}
 
-      <div style={{ ...s.note, marginTop: "8px", color: "#666" }}>
+      <div style={{ textAlign: "center", fontSize: fsXs, marginTop: "6px", color: "#555" }}>
         Terima kasih atas kunjungan Anda
       </div>
 
+      {/* ── Kode transaksi footer ── */}
       <div style={{ textAlign: "center", marginTop: "6px", fontSize: "8px", color: "#999" }}>
         {transaction.code}
       </div>
 
-      <div style={{ height: "16px" }} />
+      {/* Spasi cutter */}
+      <div style={{ height: "12px" }} />
     </div>
   )
 }
