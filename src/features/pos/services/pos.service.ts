@@ -1,6 +1,5 @@
 import { prisma } from "@/lib/prisma"
 import { log } from "@/lib/logger"
-import { generateCode } from "@/lib/utils"
 import { generateSequentialCode } from "@/lib/code-generator"
 import { ValidationError, NotFoundError, ConflictError } from "@/lib/exceptions"
 import { createMovement } from "@/features/stock-movements/services/stock-movement.service"
