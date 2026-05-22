@@ -425,6 +425,7 @@ enum SettingGroup {
   STORE
   POS
   REPORT
+  PRINTER
 }
 
 // ─────────────────────────────────────────────

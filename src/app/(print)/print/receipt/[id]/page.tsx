@@ -5,7 +5,7 @@
  */
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
-import { getStoreSettings } from "@/features/settings/services/settings.service"
+import { getStoreSettings, getPrinterSettings } from "@/features/settings/services/settings.service"
 import { ThermalReceipt } from "@/features/pos/components/ThermalReceipt"
 
 interface Props {
@@ -15,7 +15,7 @@ interface Props {
 export default async function PrintReceiptPage({ params }: Props) {
   const { id } = await params
 
-  const [transaction, storeSettings] = await Promise.all([
+  const [transaction, storeSettings, printerSettings] = await Promise.all([
     prisma.transaction.findUnique({
       where: { id },
       include: {
@@ -28,29 +28,19 @@ export default async function PrintReceiptPage({ params }: Props) {
       },
     }),
     getStoreSettings(),
+    getPrinterSettings(),
   ])
 
   if (!transaction || transaction.confirmationStatus !== "CONFIRMED") {
     notFound()
   }
 
-  // Ambil printer settings dari DB
-  const printerSetting = await prisma.setting.findUnique({
-    where: { key: "printer_receipt_width" },
-  })
-  const receiptWidth = printerSetting?.value ?? "80mm"
-
-  const logoSetting = await prisma.setting.findUnique({
-    where: { key: "store_logo_url" },
-  })
-  const logoUrl = logoSetting?.value ?? null
-
   return (
     <ThermalReceipt
       transaction={transaction as any}
       storeSettings={storeSettings}
-      logoUrl={logoUrl}
-      receiptWidth={receiptWidth}
+      logoUrl={storeSettings.logoUrl || null}
+      receiptWidth={printerSettings.receiptWidth}
     />
   )
 }

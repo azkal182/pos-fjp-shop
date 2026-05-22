@@ -33,9 +33,11 @@ export function PrinterSettings() {
       .then((json) => {
         const store = json.data?.STORE ?? {}
         const printer = json.data?.PRINTER ?? {}
-        const width = printer["printer_receipt_width"] ?? store["printer_receipt_width"] ?? "80mm"
+        // printer_receipt_width ada di group PRINTER
+        const width = printer["printer_receipt_width"] ?? "80mm"
         setValue("printer_receipt_width", width as "58mm" | "80mm")
-        setLogoUrl(store["store_logo_url"] ?? null)
+        // store_logo_url ada di group STORE
+        setLogoUrl(store["store_logo_url"] || null)
       })
       .catch(() => {})
       .finally(() => setIsLoadingLogo(false))
