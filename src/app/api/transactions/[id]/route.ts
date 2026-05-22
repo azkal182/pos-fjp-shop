@@ -15,14 +15,14 @@ export const GET = withHandler(async (_req: NextRequest, ctx) => {
 
 const updateDraftItemSchema = z.object({
   productId: z.string().min(1),
-  quantity: z.number().int().min(1),
-  sellPrice: z.number().min(0),
-  discountAmount: z.number().min(0).default(0),
+  quantity: z.coerce.number().int().min(1),
+  sellPrice: z.coerce.number().min(0),
+  discountAmount: z.coerce.number().min(0).default(0),
 })
 
 const updateDraftSchema = z.object({
   items: z.array(updateDraftItemSchema).min(1, "Minimal 1 item"),
-  discountAmount: z.number().min(0).default(0),
+  discountAmount: z.coerce.number().min(0).default(0),
 })
 
 // PATCH /api/transactions/:id — update items draft (sebelum konfirmasi)
