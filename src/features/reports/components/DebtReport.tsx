@@ -6,7 +6,7 @@ import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { FileDown, Loader2 } from "lucide-react"
-import { usePdfExport } from "@/lib/pdf/usePdfExport"
+import { usePdfExport, fetchImageAsBase64 } from "@/lib/pdf/usePdfExport"
 import { DebtReportPdf } from "../pdf/DebtReportPdf"
 import { useSettingsStore } from "@/stores/settings.store"
 import type { DebtReport as DebtReportType } from "../types/report.types"
@@ -52,13 +52,14 @@ export function DebtReport() {
       // fallback: generate PDF tanpa detail baris
     }
 
+    const logoBase64 = store.logoUrl ? await fetchImageAsBase64(store.logoUrl) : null
     await exportPdf(
       <DebtReportPdf
         debts={debts}
         storeName={store.storeName || "FJP Shop"}
         storeAddress={store.storeAddress}
         storePhone={store.storePhone}
-        logoUrl={store.logoUrl || undefined}
+        logoUrl={logoBase64 || undefined}
         totalOutstanding={data.totalOutstanding}
         customersWithDebt={data.totalCustomersWithDebt}
       />,

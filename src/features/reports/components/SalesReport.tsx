@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button"
 import { FileDown, Loader2 } from "lucide-react"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
-import { usePdfExport } from "@/lib/pdf/usePdfExport"
+import { usePdfExport, fetchImageAsBase64 } from "@/lib/pdf/usePdfExport"
 import { SalesReportPdf } from "../pdf/SalesReportPdf"
 import { useSettingsStore } from "@/stores/settings.store"
 import type { SalesReport as SalesReportType, SalesDataPoint } from "../types/report.types"
@@ -48,13 +48,15 @@ export function SalesReport() {
     const dateFrom = currentFilters?.dateFrom ?? new Date(Date.now() - 30 * 86400000)
     const dateTo = currentFilters?.dateTo ?? new Date()
     const filename = `laporan-penjualan-${format(dateFrom, "yyyyMMdd")}-${format(dateTo, "yyyyMMdd")}.pdf`
+    // Fetch logo sebagai base64 agar tidak ada masalah CORS saat PDF di-generate di browser
+    const logoBase64 = store.logoUrl ? await fetchImageAsBase64(store.logoUrl) : null
     await exportPdf(
       <SalesReportPdf
         data={data}
         storeName={store.storeName || "FJP Shop"}
         storeAddress={store.storeAddress}
         storePhone={store.storePhone}
-        logoUrl={store.logoUrl || undefined}
+        logoUrl={logoBase64 || undefined}
         dateFrom={dateFrom}
         dateTo={dateTo}
       />,

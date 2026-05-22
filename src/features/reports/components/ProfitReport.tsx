@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { FileDown, Loader2 } from "lucide-react"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
-import { usePdfExport } from "@/lib/pdf/usePdfExport"
+import { usePdfExport, fetchImageAsBase64 } from "@/lib/pdf/usePdfExport"
 import { ProfitReportPdf } from "../pdf/ProfitReportPdf"
 import { useSettingsStore } from "@/stores/settings.store"
 import type { ProfitReport as ProfitReportType, ProfitDataPoint } from "../types/report.types"
@@ -49,13 +49,14 @@ export function ProfitReport() {
     const dateFrom = currentFilters?.dateFrom ?? new Date(Date.now() - 30 * 86400000)
     const dateTo = currentFilters?.dateTo ?? new Date()
     const filename = `laporan-profit-${format(dateFrom, "yyyyMMdd")}-${format(dateTo, "yyyyMMdd")}.pdf`
+    const logoBase64 = store.logoUrl ? await fetchImageAsBase64(store.logoUrl) : null
     await exportPdf(
       <ProfitReportPdf
         data={data}
         storeName={store.storeName || "FJP Shop"}
         storeAddress={store.storeAddress}
         storePhone={store.storePhone}
-        logoUrl={store.logoUrl || undefined}
+        logoUrl={logoBase64 || undefined}
         dateFrom={dateFrom}
         dateTo={dateTo}
       />,
