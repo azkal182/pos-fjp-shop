@@ -67,22 +67,22 @@ export default function VendorDetailPage() {
     <PageWrapper
       title={vendor.name}
       actions={
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" size="sm" onClick={() => router.back()}>
-            <ArrowLeft className="h-4 w-4 mr-1.5" />
-            Kembali
+            <ArrowLeft className="h-4 w-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Kembali</span>
           </Button>
           <Button variant="outline" size="sm" onClick={() => router.push(`/vendor-debts/${id}`)}>
-            <Building2 className="h-4 w-4 mr-1.5" />
-            Hutang
+            <Building2 className="h-4 w-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Hutang</span>
           </Button>
           <Button variant="outline" size="sm" onClick={() => router.push(`/purchases/new?vendorId=${id}`)}>
-            <Plus className="h-4 w-4 mr-1.5" />
-            Pembelian Baru
+            <Plus className="h-4 w-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Pembelian Baru</span>
           </Button>
           <Button size="sm" onClick={() => setIsEditOpen(true)}>
-            <Pencil className="h-4 w-4 mr-1.5" />
-            Edit
+            <Pencil className="h-4 w-4 sm:mr-1.5" />
+            <span className="hidden sm:inline">Edit</span>
           </Button>
         </div>
       }

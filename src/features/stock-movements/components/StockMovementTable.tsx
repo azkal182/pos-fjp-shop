@@ -113,18 +113,18 @@ export function StockMovementTable({
   return (
     <div className="space-y-4">
       {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3">
         <SearchInput
           value={filters.search}
           onChange={(v) => onFilterChange("search", v)}
           placeholder="Cari nama produk..."
-          className="w-56"
+          className="w-full sm:w-56"
         />
         <Select
           value={filters.type || "all"}
           onValueChange={(v) => onFilterChange("type", v === "all" ? "" : v)}
         >
-          <SelectTrigger className="w-48">
+          <SelectTrigger className="w-full sm:w-48">
             <SelectValue placeholder="Semua Tipe" />
           </SelectTrigger>
           <SelectContent>
@@ -139,7 +139,7 @@ export function StockMovementTable({
           value={{ from: filters.dateFrom, to: filters.dateTo }}
           onChange={onDateRangeChange}
           placeholder="Filter tanggal..."
-          className="w-64"
+          className="w-full sm:w-64"
         />
       </div>
 

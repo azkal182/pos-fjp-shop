@@ -59,7 +59,9 @@ function ProductSearch({ vendorId, value, onChange, inputRef }: ProductSearchPro
   const [products, setProducts] = useState<Product[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
   const [activeIndex, setActiveIndex] = useState(-1)
+  const containerRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
+  const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({})
 
   useEffect(() => { setSearch(value?.name ?? "") }, [value])
 
@@ -77,6 +79,20 @@ function ProductSearch({ vendorId, value, onChange, inputRef }: ProductSearchPro
     }, 250)
     return () => clearTimeout(t)
   }, [search, vendorId])
+
+  // Hitung posisi dropdown berdasarkan posisi input — pakai fixed positioning
+  // agar tidak terpotong oleh overflow:hidden di ancestor manapun
+  useEffect(() => {
+    if (!showDropdown || !containerRef.current) return
+    const rect = containerRef.current.getBoundingClientRect()
+    setDropdownStyle({
+      position: "fixed",
+      top: rect.bottom + 4,
+      left: rect.left,
+      width: rect.width,
+      zIndex: 9999,
+    })
+  }, [showDropdown, search])
 
   useEffect(() => {
     if (activeIndex >= 0 && listRef.current) {
@@ -101,8 +117,7 @@ function ProductSearch({ vendorId, value, onChange, inputRef }: ProductSearchPro
   }
 
   return (
-    // z-[100] + relative agar dropdown muncul di atas semua elemen sekitarnya
-    <div className="relative z-[100]">
+    <div ref={containerRef} className="relative">
       <Input
         ref={inputRef}
         value={search}
@@ -117,8 +132,8 @@ function ProductSearch({ vendorId, value, onChange, inputRef }: ProductSearchPro
       {showDropdown && products.length > 0 && (
         <div
           ref={listRef}
-          // z-[200] agar dropdown selalu di atas card/tabel di bawahnya
-          className="absolute z-[200] top-full left-0 right-0 mt-1 bg-background border rounded-lg shadow-xl max-h-52 overflow-y-auto"
+          style={dropdownStyle}
+          className="bg-background border rounded-lg shadow-xl max-h-52 overflow-y-auto"
         >
           {products.map((p, i) => (
             <button
@@ -218,9 +233,9 @@ function AddItemBar({ vendorId, onAdd }: AddItemBarProps) {
   const isPriceManual = catalogPrice !== null && parseFloat(price) !== catalogPrice
 
   return (
-    // overflow-visible agar dropdown tidak terpotong oleh parent card
-    <div className="px-4 py-3 border-b bg-muted/10 space-y-2 overflow-visible">
-      <div className="grid grid-cols-[1fr_80px_140px_auto] gap-2 items-end">
+    // overflow-hidden aman karena dropdown pakai position:fixed
+    <div className="px-4 py-3 border-b bg-muted/10 space-y-2">
+      <div className="grid grid-cols-1 sm:grid-cols-[1fr_80px_140px_auto] gap-2 items-end">
         {/* Produk */}
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">Produk</Label>
@@ -317,7 +332,7 @@ function CartTable({ cart, onUpdate, onRemove }: CartTableProps) {
 
   return (
     <>
-      {/* Header kolom */}
+      {/* Header kolom — hanya tampil di sm+ */}
       <div className="hidden sm:grid grid-cols-[1fr_80px_140px_90px_36px] gap-2 px-4 py-2 bg-muted/20 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b">
         <span>Produk</span>
         <span className="text-center">Qty</span>
@@ -330,47 +345,56 @@ function CartTable({ cart, onUpdate, onRemove }: CartTableProps) {
         {cart.map((item) => {
           const subtotal = item.quantity * item.buyPrice
           return (
-            <div key={item.uid} className="grid grid-cols-[1fr_80px_140px_90px_36px] gap-2 px-4 py-2.5 items-center">
+            <div key={item.uid} className="px-4 py-2.5 space-y-2 sm:space-y-0 sm:grid sm:grid-cols-[1fr_80px_140px_90px_36px] sm:gap-2 sm:items-center">
               {/* Produk */}
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{item.productName}</p>
-                <p className="text-xs text-muted-foreground font-mono">{item.productCode} · {item.unit}</p>
+              <div className="min-w-0 flex items-start justify-between sm:block">
+                <div>
+                  <p className="text-sm font-medium truncate">{item.productName}</p>
+                  <p className="text-xs text-muted-foreground font-mono">{item.productCode} · {item.unit}</p>
+                </div>
+                {/* Hapus — tampil di kanan nama di mobile */}
+                <Button
+                  type="button" variant="ghost" size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-destructive sm:hidden shrink-0"
+                  onClick={() => onRemove(item.uid)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
               </div>
 
-              {/* Qty editable */}
-              <Input
-                type="number" min={1}
-                value={item.quantity}
-                onChange={(e) => onUpdate(item.uid, "quantity", Math.max(1, parseInt(e.target.value) || 1))}
-                onFocus={(e) => e.target.select()}
-                className="h-8 text-sm text-center px-1"
-              />
-
-              {/* Harga Beli editable */}
-              <div className="relative">
-                <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">Rp</span>
-                <Input
-                  type="number" min={0}
-                  value={item.buyPrice}
-                  onChange={(e) => onUpdate(item.uid, "buyPrice", parseFloat(e.target.value) || 0)}
-                  onFocus={(e) => e.target.select()}
-                  className="h-8 text-sm pl-6"
-                />
+              {/* Qty + Harga + Subtotal — row di mobile */}
+              <div className="flex items-center gap-2 sm:contents">
+                <div className="flex-1 sm:contents">
+                  <Input
+                    type="number" min={1}
+                    value={item.quantity}
+                    onChange={(e) => onUpdate(item.uid, "quantity", Math.max(1, parseInt(e.target.value) || 1))}
+                    onFocus={(e) => e.target.select()}
+                    className="h-8 text-sm text-center px-1 w-full sm:w-auto"
+                  />
+                </div>
+                <div className="relative flex-[2] sm:contents">
+                  <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">Rp</span>
+                  <Input
+                    type="number" min={0}
+                    value={item.buyPrice}
+                    onChange={(e) => onUpdate(item.uid, "buyPrice", parseFloat(e.target.value) || 0)}
+                    onFocus={(e) => e.target.select()}
+                    className="h-8 text-sm pl-6 w-full sm:w-auto"
+                  />
+                </div>
+                <div className="text-right shrink-0 sm:contents">
+                  <CurrencyDisplay amount={subtotal} className="text-sm font-semibold" />
+                </div>
+                {/* Hapus — hanya di sm+ */}
+                <Button
+                  type="button" variant="ghost" size="icon"
+                  className="hidden sm:flex h-8 w-8 text-muted-foreground hover:text-destructive"
+                  onClick={() => onRemove(item.uid)}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
               </div>
-
-              {/* Subtotal */}
-              <div className="text-right">
-                <CurrencyDisplay amount={subtotal} className="text-sm font-semibold" />
-              </div>
-
-              {/* Hapus */}
-              <Button
-                type="button" variant="ghost" size="icon"
-                className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                onClick={() => onRemove(item.uid)}
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
             </div>
           )
         })}
@@ -584,8 +608,8 @@ export function PurchaseForm({ onSuccess, defaultVendorId }: PurchaseFormProps) 
             </div>
 
             {/* Tabel item */}
-            {/* overflow-visible agar dropdown ProductSearch tidak terpotong */}
-            <div className="rounded-xl border bg-card overflow-visible">
+            {/* overflow-hidden aman karena dropdown pakai position:fixed */}
+            <div className="rounded-xl border bg-card overflow-hidden">
               <div className="flex items-center justify-between px-4 py-3 border-b bg-muted/30 rounded-t-xl">
                 <div className="flex items-center gap-2">
                   <ShoppingBag className="h-4 w-4 text-muted-foreground" />

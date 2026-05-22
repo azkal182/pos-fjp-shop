@@ -85,10 +85,12 @@ export function ProfitReport() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <ReportFilters onFilter={fetchData} />
+      <div className="flex flex-col sm:flex-row sm:items-start gap-3">
+        <div className="flex-1 min-w-0">
+          <ReportFilters onFilter={fetchData} />
+        </div>
         {data && (
-          <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={isGenerating} className="gap-2 shrink-0">
+          <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={isGenerating} className="gap-2 shrink-0 self-start">
             {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
             Export PDF
           </Button>

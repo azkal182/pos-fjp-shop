@@ -153,55 +153,60 @@ export function VendorLedger({ vendorId, refreshKey }: { vendorId: string; refre
       </CardHeader>
 
       <CardContent className="p-0">
-        <div className="grid grid-cols-[1fr_100px_100px_110px] gap-2 px-4 py-2 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-y">
-          <span>Keterangan</span>
-          <span className="text-right">Tagihan (+)</span>
-          <span className="text-right">Bayar (−)</span>
-          <span className="text-right">Saldo</span>
-        </div>
+        {/* overflow-x-auto agar tabel tidak overflow di mobile */}
+        <div className="overflow-x-auto">
+          <div className="min-w-[480px]">
+            <div className="grid grid-cols-[1fr_100px_100px_110px] gap-2 px-4 py-2 bg-muted/50 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-y">
+              <span>Keterangan</span>
+              <span className="text-right">Tagihan (+)</span>
+              <span className="text-right">Bayar (−)</span>
+              <span className="text-right">Saldo</span>
+            </div>
 
-        <div className="divide-y">
-          {data.entries.map((entry) => {
-            const isDebit = entry.direction === "DEBIT"
-            const balance = Number(entry.runningBalance)
-            return (
-              <div
-                key={entry.id}
-                className={`grid grid-cols-[1fr_100px_100px_110px] gap-2 px-4 py-2.5 text-sm items-center ${
-                  isDebit ? "bg-red-50/30 dark:bg-red-950/10" : "bg-green-50/30 dark:bg-green-950/10"
-                }`}
-              >
-                <div className="min-w-0">
-                  <p className={`font-medium truncate ${isDebit ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"}`}>
-                    {TYPE_LABELS[entry.type] ?? entry.type}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {format(new Date(entry.createdAt), "dd MMM yyyy HH:mm", { locale: idLocale })}
-                    {entry.notes && ` · ${entry.notes}`}
-                  </p>
-                </div>
-                <div className="text-right">
-                  {isDebit && <CurrencyDisplay amount={Number(entry.amount)} className="text-sm font-medium text-red-600 dark:text-red-400" />}
-                </div>
-                <div className="text-right">
-                  {!isDebit && <CurrencyDisplay amount={Number(entry.amount)} className="text-sm font-medium text-green-600 dark:text-green-400" />}
-                </div>
-                <div className="text-right">
-                  {balance < 0 ? (
-                    <span className="text-sm font-semibold text-blue-600">
-                      +<CurrencyDisplay amount={Math.abs(balance)} className="text-sm font-semibold text-blue-600" />
-                      <span className="text-[10px] ml-0.5 opacity-70">kredit</span>
-                    </span>
-                  ) : (
-                    <CurrencyDisplay
-                      amount={balance}
-                      className={`text-sm font-semibold ${balance > 0 ? "text-red-600" : "text-muted-foreground"}`}
-                    />
-                  )}
-                </div>
-              </div>
-            )
-          })}
+            <div className="divide-y">
+              {data.entries.map((entry) => {
+                const isDebit = entry.direction === "DEBIT"
+                const balance = Number(entry.runningBalance)
+                return (
+                  <div
+                    key={entry.id}
+                    className={`grid grid-cols-[1fr_100px_100px_110px] gap-2 px-4 py-2.5 text-sm items-center ${
+                      isDebit ? "bg-red-50/30 dark:bg-red-950/10" : "bg-green-50/30 dark:bg-green-950/10"
+                    }`}
+                  >
+                    <div className="min-w-0">
+                      <p className={`font-medium truncate ${isDebit ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"}`}>
+                        {TYPE_LABELS[entry.type] ?? entry.type}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(entry.createdAt), "dd MMM yyyy HH:mm", { locale: idLocale })}
+                        {entry.notes && ` · ${entry.notes}`}
+                      </p>
+                    </div>
+                    <div className="text-right">
+                      {isDebit && <CurrencyDisplay amount={Number(entry.amount)} className="text-sm font-medium text-red-600 dark:text-red-400" />}
+                    </div>
+                    <div className="text-right">
+                      {!isDebit && <CurrencyDisplay amount={Number(entry.amount)} className="text-sm font-medium text-green-600 dark:text-green-400" />}
+                    </div>
+                    <div className="text-right">
+                      {balance < 0 ? (
+                        <span className="text-sm font-semibold text-blue-600">
+                          +<CurrencyDisplay amount={Math.abs(balance)} className="text-sm font-semibold text-blue-600" />
+                          <span className="text-[10px] ml-0.5 opacity-70">kredit</span>
+                        </span>
+                      ) : (
+                        <CurrencyDisplay
+                          amount={balance}
+                          className={`text-sm font-semibold ${balance > 0 ? "text-red-600" : "text-muted-foreground"}`}
+                        />
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>

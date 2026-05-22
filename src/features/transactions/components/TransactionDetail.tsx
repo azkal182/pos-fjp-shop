@@ -203,13 +203,15 @@ export function TransactionDetail({ transaction }: TransactionDetailProps) {
           <CardHeader>
             <CardTitle className="text-base">Item Transaksi</CardTitle>
           </CardHeader>
-          <CardContent>
-            <DataTable
-              columns={itemColumns}
-              data={transaction.items}
-              emptyMessage="Tidak ada item"
-              keyExtractor={(row) => row.id}
-            />
+          <CardContent className="p-0 sm:p-6">
+            <div className="overflow-x-auto">
+              <DataTable
+                columns={itemColumns}
+                data={transaction.items}
+                emptyMessage="Tidak ada item"
+                keyExtractor={(row) => row.id}
+              />
+            </div>
           </CardContent>
         </Card>
       </div>

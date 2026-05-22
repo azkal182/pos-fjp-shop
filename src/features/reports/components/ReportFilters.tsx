@@ -58,16 +58,16 @@ export function ReportFilters({ onFilter, showGroupBy, showCategory }: ReportFil
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-3">
+    <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 sm:gap-3">
       <DateRangePicker
         value={dateRange}
         onChange={setDateRange}
         placeholder="Pilih rentang tanggal"
-        className="w-64"
+        className="w-full sm:w-64"
       />
       {showGroupBy && (
         <Select value={groupBy} onValueChange={setGroupBy}>
-          <SelectTrigger className="w-36">
+          <SelectTrigger className="w-full sm:w-36">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -79,7 +79,7 @@ export function ReportFilters({ onFilter, showGroupBy, showCategory }: ReportFil
       )}
       {showCategory && (
         <Select value={categoryId || "all"} onValueChange={(v) => setCategoryId(v === "all" ? "" : v)}>
-          <SelectTrigger className="w-44">
+          <SelectTrigger className="w-full sm:w-44">
             <SelectValue placeholder="Semua Kategori" />
           </SelectTrigger>
           <SelectContent>
@@ -90,7 +90,7 @@ export function ReportFilters({ onFilter, showGroupBy, showCategory }: ReportFil
           </SelectContent>
         </Select>
       )}
-      <Button onClick={handleApply} size="sm">Terapkan</Button>
+      <Button onClick={handleApply} size="sm" className="w-full sm:w-auto">Terapkan</Button>
     </div>
   )
 }

@@ -24,8 +24,8 @@ export default function DashboardPage() {
         </Button>
       }
     >
-      {/* Row 1: Sales summary cards — 6 cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* Row 1: Sales summary cards — 1 col mobile, 2 col sm, 3 col lg, 6 col xl */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <SalesCard
           title="Penjualan Hari Ini"
           value={data?.salesSummary.todayRevenue ?? 0}

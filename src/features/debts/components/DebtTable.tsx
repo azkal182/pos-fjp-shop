@@ -217,8 +217,8 @@ export function DebtTable({
                 <div className="rounded-lg border overflow-hidden">
                   <div className="divide-y">
                     {summaryData.map((c) => (
-                      <div key={c.customerId} className="flex items-center justify-between px-4 py-3 gap-3">
-                        <div className="min-w-0">
+                      <div key={c.customerId} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 px-4 py-3">
+                        <div className="flex-1 min-w-0">
                           <Link href={`/debts/${c.customerId}`} className="font-medium text-sm hover:underline flex items-center gap-1.5">
                             {c.name}
                             <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
@@ -226,7 +226,7 @@ export function DebtTable({
                           {c.phone && <p className="text-xs text-muted-foreground">{c.phone}</p>}
                           <p className="text-xs text-muted-foreground">{c.debtCount} transaksi belum lunas</p>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex items-center justify-between sm:justify-end gap-3 shrink-0">
                           <div className="text-right">
                             <p className="text-xs text-muted-foreground">Total Hutang</p>
                             <CurrencyDisplay amount={c.totalRemaining} className="text-sm font-bold text-red-600" />
@@ -234,11 +234,12 @@ export function DebtTable({
                           <Button
                             size="sm"
                             variant="outline"
-                            className="gap-1.5 h-8"
+                            className="gap-1.5 h-8 shrink-0"
                             onClick={() => setPayTarget({ id: c.customerId, name: c.name })}
                           >
                             <Banknote className="h-3.5 w-3.5" />
-                            Bayar Hutang
+                            <span className="hidden xs:inline">Bayar</span>
+                            <span className="xs:hidden">Bayar</span>
                           </Button>
                         </div>
                       </div>

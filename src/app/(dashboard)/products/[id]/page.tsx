@@ -240,15 +240,17 @@ export default function ProductDetailPage() {
                 <CardHeader>
                   <CardTitle className="text-base">Riwayat Pergerakan Stok</CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <DataTable
-                    columns={movementColumns}
-                    data={movements}
-                    isLoading={isMovementsLoading}
-                    emptyMessage="Belum ada pergerakan stok"
-                    emptyDescription="Stok akan tercatat saat ada pembelian atau penjualan"
-                    keyExtractor={(row) => row.id}
-                  />
+                <CardContent className="p-0 sm:p-6">
+                  <div className="overflow-x-auto">
+                    <DataTable
+                      columns={movementColumns}
+                      data={movements}
+                      isLoading={isMovementsLoading}
+                      emptyMessage="Belum ada pergerakan stok"
+                      emptyDescription="Stok akan tercatat saat ada pembelian atau penjualan"
+                      keyExtractor={(row) => row.id}
+                    />
+                  </div>
                 </CardContent>
               </Card>
             </TabsContent>
