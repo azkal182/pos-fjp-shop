@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@/generated/prisma"
 import { prisma as globalPrisma } from "@/lib/prisma"
 import { log } from "@/lib/logger"
+import { addEntry } from "@/features/ledger/services/ledger.service"
 import type { AllocationResult, DebtAllocation, FifoPreview } from "../types/debt.types"
 
 type TxClient = Omit<
@@ -72,7 +73,8 @@ export async function allocatePaymentFifo(
   totalPayment: number,
   sourceTransactionId?: string,
   notes?: string,
-  tx?: TxClient
+  tx?: TxClient,
+  createdBy?: string  // jika diisi → tulis LedgerEntry PAYMENT_IN; jika kosong (POS) → skip (POS sudah tulis sendiri)
 ): Promise<AllocationResult & { customerPaymentId: string }> {
   const db = tx ?? globalPrisma
 
@@ -156,6 +158,30 @@ export async function allocatePaymentFifo(
     })
 
     remaining -= allocatedAmount
+  }
+
+  // Tulis LedgerEntry PAYMENT_IN CREDIT hanya jika createdBy diisi
+  // (manual payment). Untuk POS overpay, ledger sudah ditulis di pos.service.ts
+  // sebelum memanggil fungsi ini — tidak boleh double entry.
+  if (createdBy) {
+    await addEntry({
+      partyType: "CUSTOMER",
+      partyId: customerId,
+      type: "PAYMENT_IN",
+      direction: "CREDIT",
+      amount: totalPayment,
+      description: "Pembayaran hutang customer",
+      referenceType: "CUSTOMER_PAYMENT",
+      referenceId: customerPayment.id,
+      notes,
+      createdBy,
+    }, db)
+
+    log.debug("[DEBT]", "Ledger PAYMENT_IN entry created", {
+      customerId,
+      amount: totalPayment,
+      customerPaymentId: customerPayment.id,
+    })
   }
 
   return {

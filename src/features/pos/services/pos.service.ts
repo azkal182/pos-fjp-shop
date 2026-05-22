@@ -254,6 +254,12 @@ export async function processCheckout(payload: CheckoutInput, userId: string) {
       data: { changeAmount: finalChangeAmount, depositCreated },
     })
 
+    // 11. Update deposit record di dalam transaksi yang sama
+    // Dipindahkan ke sini agar atomik — jika gagal, seluruh transaksi rollback
+    if (depositUsed > 0 && depositId && customerId) {
+      await useDeposit(depositId, depositUsed, "TRANSACTION", trx.id, userId, tx)
+    }
+
     log.info("[POS]", "Checkout completed", {
       code,
       customerId: customerId ?? "walk-in",
@@ -269,11 +275,6 @@ export async function processCheckout(payload: CheckoutInput, userId: string) {
 
     return finalTrx
   })
-
-  // Jika ada deposit yang dipakai, update deposit record
-  if (depositUsed > 0 && depositId && customerId) {
-    await useDeposit(depositId, depositUsed, "TRANSACTION", transaction.id, userId)
-  }
 
   return prisma.transaction.findUniqueOrThrow({
     where: { id: transaction.id },

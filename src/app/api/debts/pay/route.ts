@@ -3,6 +3,7 @@ import { withHandler } from "@/lib/api-handler"
 import { successResponse } from "@/lib/api-response"
 import { ValidationError, NotFoundError, ConflictError } from "@/lib/exceptions"
 import { prisma } from "@/lib/prisma"
+import { auth } from "@/lib/auth"
 import {
   allocatePaymentFifo,
   hasOutstandingDebt,
@@ -12,6 +13,9 @@ import { debtPaymentSchema } from "@/features/debts/schemas/debt.schema"
 import { log } from "@/lib/logger"
 
 export const POST = withHandler(async (req: NextRequest) => {
+  const session = await auth.api.getSession({ headers: req.headers })
+  const userId = session!.user.id
+
   const body = await req.json()
   const parsed = debtPaymentSchema.safeParse(body)
   if (!parsed.success) throw new ValidationError(parsed.error.issues[0].message)
@@ -35,7 +39,8 @@ export const POST = withHandler(async (req: NextRequest) => {
     )
   }
 
-  const result = await allocatePaymentFifo(customerId, amount, undefined, notes)
+  // Pass userId sebagai createdBy agar ledger entry PAYMENT_IN ditulis
+  const result = await allocatePaymentFifo(customerId, amount, undefined, notes, undefined, userId)
 
   log.info("[DEBT]", "Manual debt payment processed", {
     customerId,
