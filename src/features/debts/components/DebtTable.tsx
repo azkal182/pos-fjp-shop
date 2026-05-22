@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { DataTable, type Column } from "@/components/shared/DataTable"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { StatusBadge } from "@/components/shared/StatusBadge"
@@ -151,80 +152,140 @@ export function DebtTable({
 
   return (
     <div className="space-y-4">
-      {/* Filter bar */}
-      <div className="flex flex-wrap items-center gap-3">
-        {isGlobal && (
+      {/* Filter bar — hanya di global view */}
+      {isGlobal && (
+        <div className="flex flex-wrap items-center gap-3">
           <SearchInput
             value={filters.search}
             onChange={(v) => onFilterChange("search", v)}
             placeholder="Cari nama customer..."
             className="w-56"
           />
-        )}
-        <Select
-          value={filters.status || "active"}
-          onValueChange={(v) => onFilterChange("status", v === "active" ? "" : v)}
-        >
-          <SelectTrigger className="w-40">
-            <SelectValue placeholder="Status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="active">Belum Lunas</SelectItem>
-            <SelectItem value="UNPAID">Belum Bayar</SelectItem>
-            <SelectItem value="PARTIAL">Sebagian</SelectItem>
-            <SelectItem value="PAID">Lunas</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Di global view: tampilkan ringkasan per customer dengan tombol Bayar */}
-      {isGlobal && customerMap.size > 0 && (
-        <div className="rounded-lg border overflow-hidden">
-          <div className="bg-muted/50 px-4 py-2 text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-            Ringkasan per Customer
-          </div>
-          <div className="divide-y">
-            {Array.from(customerMap.values()).map((c) => (
-              <div key={c.id} className="flex items-center justify-between px-4 py-3 gap-3">
-                <div className="min-w-0">
-                  <Link href={`/debts/${c.id}`} className="font-medium text-sm hover:underline flex items-center gap-1.5">
-                    {c.name}
-                    <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                  </Link>
-                  {c.phone && <p className="text-xs text-muted-foreground">{c.phone}</p>}
-                </div>
-                <div className="flex items-center gap-3 shrink-0">
-                  <div className="text-right">
-                    <p className="text-xs text-muted-foreground">Total Hutang</p>
-                    <CurrencyDisplay amount={c.totalRemaining} className="text-sm font-bold text-red-600" />
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="gap-1.5 h-8"
-                    onClick={() => setPayTarget({ id: c.id, name: c.name })}
-                  >
-                    <Banknote className="h-3.5 w-3.5" />
-                    Bayar Hutang
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </div>
+          <Select
+            value={filters.status || "active"}
+            onValueChange={(v) => onFilterChange("status", v === "active" ? "" : v)}
+          >
+            <SelectTrigger className="w-40">
+              <SelectValue placeholder="Status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Belum Lunas</SelectItem>
+              <SelectItem value="UNPAID">Belum Bayar</SelectItem>
+              <SelectItem value="PARTIAL">Sebagian</SelectItem>
+              <SelectItem value="PAID">Lunas</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       )}
 
-      {/* Tabel detail per transaksi */}
-      <DataTable
-        columns={columns}
-        data={data}
-        isLoading={isLoading}
-        emptyMessage="Tidak ada hutang"
-        emptyDescription="Hutang akan muncul saat ada transaksi yang belum lunas"
-        keyExtractor={(row) => row.id}
-      />
+      {/* Global view: 2 tabs */}
+      {isGlobal ? (
+        <Tabs defaultValue="summary">
+          <TabsList>
+            <TabsTrigger value="summary">Ringkasan per Customer</TabsTrigger>
+            <TabsTrigger value="all">Semua Hutang</TabsTrigger>
+          </TabsList>
 
-      <Pagination meta={meta} onPageChange={onPageChange} />
+          {/* Tab 1: Ringkasan per Customer */}
+          <TabsContent value="summary" className="mt-4">
+            {customerMap.size === 0 ? (
+              <div className="rounded-lg border bg-card p-8 text-center">
+                <p className="text-sm text-muted-foreground">Tidak ada hutang aktif</p>
+              </div>
+            ) : (
+              <div className="rounded-lg border overflow-hidden">
+                <div className="divide-y">
+                  {Array.from(customerMap.values()).map((c) => (
+                    <div key={c.id} className="flex items-center justify-between px-4 py-3 gap-3">
+                      <div className="min-w-0">
+                        <Link href={`/debts/${c.id}`} className="font-medium text-sm hover:underline flex items-center gap-1.5">
+                          {c.name}
+                          <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Link>
+                        {c.phone && <p className="text-xs text-muted-foreground">{c.phone}</p>}
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <div className="text-right">
+                          <p className="text-xs text-muted-foreground">Total Hutang</p>
+                          <CurrencyDisplay amount={c.totalRemaining} className="text-sm font-bold text-red-600" />
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 h-8"
+                          onClick={() => setPayTarget({ id: c.id, name: c.name })}
+                        >
+                          <Banknote className="h-3.5 w-3.5" />
+                          Bayar Hutang
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </TabsContent>
+
+          {/* Tab 2: Semua Hutang per transaksi */}
+          <TabsContent value="all" className="mt-4">
+            <div className="space-y-4">
+              {/* Filter status di dalam tab */}
+              <Select
+                value={filters.status || "active"}
+                onValueChange={(v) => onFilterChange("status", v === "active" ? "" : v)}
+              >
+                <SelectTrigger className="w-40">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">Belum Lunas</SelectItem>
+                  <SelectItem value="UNPAID">Belum Bayar</SelectItem>
+                  <SelectItem value="PARTIAL">Sebagian</SelectItem>
+                  <SelectItem value="PAID">Lunas</SelectItem>
+                </SelectContent>
+              </Select>
+              <DataTable
+                columns={columns}
+                data={data}
+                isLoading={isLoading}
+                emptyMessage="Tidak ada hutang"
+                emptyDescription="Hutang akan muncul saat ada transaksi yang belum lunas"
+                keyExtractor={(row) => row.id}
+              />
+              <Pagination meta={meta} onPageChange={onPageChange} />
+            </div>
+          </TabsContent>
+        </Tabs>
+      ) : (
+        /* Per-customer view: tidak pakai tabs, langsung tabel */
+        <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <Select
+              value={filters.status || "active"}
+              onValueChange={(v) => onFilterChange("status", v === "active" ? "" : v)}
+            >
+              <SelectTrigger className="w-40">
+                <SelectValue placeholder="Status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="active">Belum Lunas</SelectItem>
+                <SelectItem value="UNPAID">Belum Bayar</SelectItem>
+                <SelectItem value="PARTIAL">Sebagian</SelectItem>
+                <SelectItem value="PAID">Lunas</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <DataTable
+            columns={columns}
+            data={data}
+            isLoading={isLoading}
+            emptyMessage="Tidak ada hutang"
+            emptyDescription="Hutang akan muncul saat ada transaksi yang belum lunas"
+            keyExtractor={(row) => row.id}
+          />
+          <Pagination meta={meta} onPageChange={onPageChange} />
+        </div>
+      )}
 
       {payTarget && (
         <DebtPaymentForm
