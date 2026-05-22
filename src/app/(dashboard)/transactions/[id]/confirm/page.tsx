@@ -195,6 +195,7 @@ export default function ConfirmTransactionPage() {
   const [isEditMode, setIsEditMode] = useState(false)
   const [editItems, setEditItems] = useState<EditableItem[]>([])
   const [discount, setDiscount] = useState(0)
+  const [isSavingEdit, setIsSavingEdit] = useState(false)
 
   // Payment state
   const [paidAmount, setPaidAmount] = useState<number | "">("")
@@ -285,6 +286,38 @@ export default function ConfirmTransactionPage() {
         sellPrice: p.sellPrice,
         discountAmount: 0,
       }])
+    }
+  }
+
+  async function handleToggleEditMode() {
+    if (isEditMode) {
+      // Selesai edit → simpan ke server
+      setIsSavingEdit(true)
+      try {
+        const res = await fetch(`/api/transactions/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            items: editItems.map((i) => ({
+              productId: i.productId,
+              quantity: i.quantity,
+              sellPrice: i.sellPrice,
+              discountAmount: i.discountAmount,
+            })),
+            discountAmount: discount,
+          }),
+        })
+        const json = await res.json()
+        if (!res.ok) throw new Error(json.error ?? "Gagal menyimpan perubahan")
+        toast.success("Perubahan item berhasil disimpan")
+        setIsEditMode(false)
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Terjadi kesalahan")
+      } finally {
+        setIsSavingEdit(false)
+      }
+    } else {
+      setIsEditMode(true)
     }
   }
 
@@ -395,10 +428,16 @@ export default function ConfirmTransactionPage() {
                 variant={isEditMode ? "default" : "outline"}
                 size="sm"
                 className="h-7 text-xs gap-1.5"
-                onClick={() => setIsEditMode(!isEditMode)}
+                onClick={handleToggleEditMode}
+                disabled={isSavingEdit}
               >
-                <Pencil className="h-3.5 w-3.5" />
-                {isEditMode ? "Selesai Edit" : "Edit Item"}
+                {isSavingEdit ? (
+                  <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Menyimpan...</>
+                ) : isEditMode ? (
+                  <><CheckCircle2 className="h-3.5 w-3.5" /> Selesai Edit</>
+                ) : (
+                  <><Pencil className="h-3.5 w-3.5" /> Edit Item</>
+                )}
               </Button>
             </div>
 

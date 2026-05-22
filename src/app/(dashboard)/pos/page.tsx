@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { ShoppingBag, SlidersHorizontal, X, Trash2, ClipboardList } from "lucide-react"
+import { ShoppingBag, SlidersHorizontal, X, Trash2, ClipboardList, ArrowRight } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -12,6 +12,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog"
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
 import { EmptyState } from "@/components/shared/EmptyState"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
@@ -30,13 +37,14 @@ export default function POSPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
+  // Dialog setelah simpan draft
+  const [savedDraft, setSavedDraft] = useState<{ id: string; code: string } | null>(null)
 
   const total = totalAmount()
   const cartEmpty = items.length === 0
   const totalQty = items.reduce((s, i) => s + i.quantity, 0)
   const totalProducts = items.length
 
-  // Prevent navigation jika ada item di keranjang
   useEffect(() => {
     function handleBeforeUnload(e: BeforeUnloadEvent) {
       if (items.length > 0) {
@@ -70,8 +78,8 @@ export default function POSPage() {
       if (!res.ok) throw new Error(json.error ?? "Gagal menyimpan order")
 
       clearCart()
-      toast.success(`Order ${json.data.code} berhasil disimpan`)
-      router.push(`/transactions/${json.data.id}/confirm`)
+      // Tampilkan dialog pilihan
+      setSavedDraft({ id: json.data.id, code: json.data.code })
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Terjadi kesalahan")
     } finally {
@@ -79,7 +87,7 @@ export default function POSPage() {
     }
   }
 
-  // Panel kasir — shared antara desktop sidebar dan mobile sheet
+  // Panel kasir
   const PanelContent = () => (
     <>
       <div className="flex-1 overflow-y-auto overflow-x-visible px-4 py-4 space-y-5">
@@ -163,7 +171,16 @@ export default function POSPage() {
               </Button>
             </div>
           ) : (
-            <span />
+            /* Tombol ke daftar draft saat keranjang kosong */
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs gap-1.5 text-muted-foreground"
+              onClick={() => router.push("/transactions/pending")}
+            >
+              <ClipboardList className="h-3.5 w-3.5" />
+              Lihat Order Pending
+            </Button>
           )}
 
           {/* Mobile: tombol buka panel kasir */}
@@ -187,8 +204,17 @@ export default function POSPage() {
 
       {/* ── Desktop: Panel kasir ── */}
       <div className="hidden sm:flex w-[300px] lg:w-[320px] flex-col bg-background border-l">
-        <div className="px-4 py-3 border-b">
+        <div className="px-4 py-3 border-b flex items-center justify-between">
           <h2 className="font-semibold text-sm text-muted-foreground uppercase tracking-wide">Panel Kasir</h2>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs gap-1 text-muted-foreground"
+            onClick={() => router.push("/transactions/pending")}
+          >
+            <ClipboardList className="h-3.5 w-3.5" />
+            Draft
+          </Button>
         </div>
         <PanelContent />
       </div>
@@ -201,9 +227,20 @@ export default function POSPage() {
               <SheetTitle className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
                 Panel Kasir
               </SheetTitle>
-              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsPanelOpen(false)}>
-                <X className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs gap-1 text-muted-foreground"
+                  onClick={() => { setIsPanelOpen(false); router.push("/transactions/pending") }}
+                >
+                  <ClipboardList className="h-3.5 w-3.5" />
+                  Draft
+                </Button>
+                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => setIsPanelOpen(false)}>
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           </SheetHeader>
           <PanelContent />
@@ -219,29 +256,52 @@ export default function POSPage() {
         description="Semua item di keranjang akan dihapus. Lanjutkan?"
         confirmLabel="Kosongkan"
       />
+
+      {/* Dialog setelah simpan draft */}
+      <Dialog open={!!savedDraft} onOpenChange={(open) => !open && setSavedDraft(null)}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardList className="h-5 w-5 text-primary" />
+              Order Berhasil Disimpan
+            </DialogTitle>
+            <DialogDescription>
+              Order <span className="font-mono font-semibold">{savedDraft?.code}</span> tersimpan sebagai draft.
+              Lanjut ke konfirmasi sekarang atau nanti?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 pt-1">
+            <Button
+              className="w-full gap-2"
+              onClick={() => {
+                setSavedDraft(null)
+                router.push(`/transactions/${savedDraft?.id}/confirm`)
+              }}
+            >
+              <ArrowRight className="h-4 w-4" />
+              Konfirmasi Sekarang
+            </Button>
+            <Button
+              variant="outline"
+              className="w-full gap-2"
+              onClick={() => {
+                setSavedDraft(null)
+                router.push("/transactions/pending")
+              }}
+            >
+              <ClipboardList className="h-4 w-4" />
+              Lihat Semua Draft
+            </Button>
+            <Button
+              variant="ghost"
+              className="w-full text-muted-foreground"
+              onClick={() => setSavedDraft(null)}
+            >
+              Tetap di Kasir
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   )
-}
-
-interface TransactionResult {
-  id: string
-  code: string
-  totalAmount: number
-  subtotal: number
-  discountAmount: number
-  paidAmount: number
-  changeAmount: number
-  debtAmount: number
-  paymentMethod: string
-  paymentStatus: string
-  transactionDate: string
-  customer: { name: string } | null
-  items: {
-    id: string
-    productName: string
-    quantity: number
-    sellPrice: number
-    discountAmount: number
-    subtotal: number
-  }[]
 }
