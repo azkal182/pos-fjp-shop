@@ -40,7 +40,7 @@ export async function updateSettings(updates: { key: string; value: string }[]) 
     const group = inferGroup(key)
     await prisma.setting.upsert({
       where: { key },
-      update: { value },
+      update: { value, group }, // update group juga agar row lama yang salah group ikut terkoreksi
       create: { key, value, group },
     })
   }
@@ -61,10 +61,10 @@ export async function getStoreSettings() {
 }
 
 export async function getPrinterSettings() {
-  const settings = await getByGroup("PRINTER")
-  const map = Object.fromEntries(settings.map((s) => [s.key, s.value]))
+  // Pakai getByKey agar tidak bergantung pada group yang tersimpan di DB
+  const widthSetting = await getByKey("printer_receipt_width")
   return {
-    receiptWidth: (map["printer_receipt_width"] ?? "80mm") as "58mm" | "80mm",
+    receiptWidth: ((widthSetting?.value) ?? "80mm") as "58mm" | "80mm",
   }
 }
 
