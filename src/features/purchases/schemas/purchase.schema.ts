@@ -14,6 +14,7 @@ export const createPurchaseSchema = z.object({
   confirmedPriceUpdates: z.array(z.string()).optional(),
   paidAmount: z.number().min(0).optional(),
   paymentMethod: z.enum(["CASH", "TRANSFER"]).optional(),
+  receiptImageUrl: z.string().url().optional().or(z.literal("")),
 })
 
 export type PurchaseItemInput = z.infer<typeof purchaseItemSchema>

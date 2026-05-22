@@ -2,13 +2,14 @@
 
 import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
-import { Eye, Banknote } from "lucide-react"
+import { Eye, Banknote, ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DataTable, type Column } from "@/components/shared/DataTable"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { StatusBadge } from "@/components/shared/StatusBadge"
 import { Pagination } from "@/components/shared/Pagination"
 import { VendorPaymentForm } from "./VendorPaymentForm"
+import { ReceiptImageDialog } from "@/features/purchases/components/ReceiptImageDialog"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
 import type { PaginationMeta } from "@/types"
@@ -23,6 +24,7 @@ interface Purchase {
   paymentStatus: string
   paymentMethod: string
   purchaseDate: string
+  receiptImageUrl?: string | null
   _count: { items: number }
   vendorDebt: {
     id: string
@@ -43,6 +45,7 @@ export function VendorPurchaseHistory({ vendorId, vendorName = "Vendor", onPayme
   const [isLoading, setIsLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [payTarget, setPayTarget] = useState<{ debtId: string; maxAmount: number } | null>(null)
+  const [receiptView, setReceiptView] = useState<{ url: string; code: string } | null>(null)
 
   const fetchPurchases = useCallback(async () => {
     setIsLoading(true)
@@ -109,9 +112,20 @@ export function VendorPurchaseHistory({ vendorId, vendorName = "Vendor", onPayme
     },
     {
       header: "Aksi",
-      className: "w-[120px] text-right",
+      className: "w-[130px] text-right",
       render: (row) => (
         <div className="flex items-center justify-end gap-1">
+          {row.receiptImageUrl && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-primary"
+              title="Lihat nota"
+              onClick={() => setReceiptView({ url: row.receiptImageUrl!, code: row.code })}
+            >
+              <ImageIcon className="h-4 w-4" />
+            </Button>
+          )}
           <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
             <Link href={`/purchases/${row.id}`}><Eye className="h-4 w-4" /></Link>
           </Button>
@@ -158,6 +172,15 @@ export function VendorPurchaseHistory({ vendorId, vendorName = "Vendor", onPayme
             fetchPurchases()
             onPaymentSuccess?.()
           }}
+        />
+      )}
+
+      {receiptView && (
+        <ReceiptImageDialog
+          open={!!receiptView}
+          onOpenChange={(open) => !open && setReceiptView(null)}
+          imageUrl={receiptView.url}
+          purchaseCode={receiptView.code}
         />
       )}
     </div>

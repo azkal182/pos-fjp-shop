@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { Eye } from "lucide-react"
+import { Eye, ImageIcon } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import {
@@ -15,6 +15,7 @@ import { DataTable, type Column } from "@/components/shared/DataTable"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { DateRangePicker } from "@/components/shared/DateRangePicker"
 import { Pagination } from "@/components/shared/Pagination"
+import { ReceiptImageDialog } from "./ReceiptImageDialog"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
 import type { PaginationMeta } from "@/types"
@@ -25,6 +26,7 @@ interface Purchase {
   vendor: { id: string; name: string }
   totalAmount: number
   purchaseDate: string
+  receiptImageUrl?: string | null
   _count: { items: number }
 }
 
@@ -58,6 +60,8 @@ export function PurchaseTable({
   onDateRangeChange,
   onPageChange,
 }: PurchaseTableProps) {
+  const [receiptView, setReceiptView] = useState<{ url: string; code: string } | null>(null)
+
   const columns: Column<Purchase>[] = [
     {
       header: "Kode PO",
@@ -89,13 +93,26 @@ export function PurchaseTable({
     },
     {
       header: "Aksi",
-      className: "w-[80px] text-right",
+      className: "w-[100px] text-right",
       render: (row) => (
-        <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
-          <Link href={`/purchases/${row.id}`} aria-label="Detail pembelian">
-            <Eye className="h-4 w-4" />
-          </Link>
-        </Button>
+        <div className="flex items-center justify-end gap-1">
+          {row.receiptImageUrl && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-primary"
+              title="Lihat nota"
+              onClick={() => setReceiptView({ url: row.receiptImageUrl!, code: row.code })}
+            >
+              <ImageIcon className="h-4 w-4" />
+            </Button>
+          )}
+          <Button variant="ghost" size="icon" className="h-8 w-8" asChild>
+            <Link href={`/purchases/${row.id}`} aria-label="Detail pembelian">
+              <Eye className="h-4 w-4" />
+            </Link>
+          </Button>
+        </div>
       ),
     },
   ]
@@ -137,6 +154,15 @@ export function PurchaseTable({
       />
 
       <Pagination meta={meta} onPageChange={onPageChange} />
+
+      {receiptView && (
+        <ReceiptImageDialog
+          open={!!receiptView}
+          onOpenChange={(open) => !open && setReceiptView(null)}
+          imageUrl={receiptView.url}
+          purchaseCode={receiptView.code}
+        />
+      )}
     </div>
   )
 }

@@ -15,11 +15,9 @@ import { Badge } from "@/components/ui/badge"
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select"
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
-} from "@/components/ui/dialog"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { PriceChangeAlert } from "./PriceChangeAlert"
+import { PurchaseConfirmDialog } from "./PurchaseConfirmDialog"
 import { createPurchaseSchema, type CreatePurchaseInput, type PriceChange } from "../schemas/purchase.schema"
 import { useToast } from "@/hooks/useToast"
 import type { Control } from "react-hook-form"
@@ -431,11 +429,9 @@ export function PurchaseForm({ onSuccess, defaultVendorId }: PurchaseFormProps) 
   const [priceChanges, setPriceChanges] = useState<PriceChange[]>([])
   const [pendingData, setPendingData] = useState<CreatePurchaseInput | null>(null)
   const [showPriceAlert, setShowPriceAlert] = useState(false)
-  const [showOverpayConfirm, setShowOverpayConfirm] = useState(false)
-  const [showDebtConfirm, setShowDebtConfirm] = useState(false)
-  const [pendingOverpayData, setPendingOverpayData] = useState<{
-    data: CreatePurchaseInput; ids: string[]; overpay: number; newDeposit: number
-  } | null>(null)
+  // Satu dialog konfirmasi untuk semua kasus (lunas, hutang, overpay)
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  const [pendingConfirmedIds, setPendingConfirmedIds] = useState<string[]>([])
 
   useEffect(() => {
     fetch("/api/vendors?isActive=true")
@@ -524,37 +520,24 @@ export function PurchaseForm({ onSuccess, defaultVendorId }: PurchaseFormProps) 
   }
 
   async function checkAndSubmit(data: CreatePurchaseInput, confirmedPriceUpdates: string[]) {
-    const paid = data.paidAmount
-    const overpay = paid !== undefined ? Math.max(0, paid - cartTotal) : 0
-
-    // Nominal kosong atau 0 = semua jadi hutang → minta konfirmasi eksplisit
-    if (paid === undefined || paid === 0) {
-      // Simpan data + confirmedPriceUpdates untuk dipakai saat user konfirmasi
-      setPendingData({ ...data, confirmedPriceUpdates } as CreatePurchaseInput & { confirmedPriceUpdates: string[] })
-      setShowDebtConfirm(true)
-      setIsSubmitting(false)
-      return
-    }
-
-    if (overpay > 0) {
-      setPendingOverpayData({ data, ids: confirmedPriceUpdates, overpay, newDeposit: vendorDeposit + overpay })
-      setShowOverpayConfirm(true)
-      setIsSubmitting(false)
-      return
-    }
-    await submitPurchase(data, confirmedPriceUpdates)
+    // Semua kasus (lunas, hutang, overpay) → tampilkan dialog konfirmasi terpusat
+    setPendingData(data)
+    setPendingConfirmedIds(confirmedPriceUpdates)
+    setShowConfirmDialog(true)
+    setIsSubmitting(false)
   }
 
-  async function submitPurchase(data: CreatePurchaseInput, confirmedPriceUpdates: string[]) {
+  async function submitPurchase(data: CreatePurchaseInput, confirmedPriceUpdates: string[], receiptImageUrl: string | null) {
     setIsSubmitting(true)
     try {
       const res = await fetch("/api/purchases", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, confirmedPriceUpdates }),
+        body: JSON.stringify({ ...data, confirmedPriceUpdates, receiptImageUrl: receiptImageUrl || undefined }),
       })
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Gagal menyimpan pembelian")
+      setShowConfirmDialog(false)
       onSuccess()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Terjadi kesalahan")
@@ -661,93 +644,23 @@ export function PurchaseForm({ onSuccess, defaultVendorId }: PurchaseFormProps) 
         onSkip={() => { setShowPriceAlert(false); pendingData && checkAndSubmit(pendingData, []) }}
       />
 
-      <Dialog open={showOverpayConfirm} onOpenChange={setShowOverpayConfirm}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Wallet className="h-5 w-5 text-blue-600" />
-              Konfirmasi Kelebihan Bayar
-            </DialogTitle>
-            <DialogDescription>Nominal yang dibayar melebihi total pembelian.</DialogDescription>
-          </DialogHeader>
-          {pendingOverpayData && (
-            <div className="space-y-4">
-              <div className="rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Kelebihan bayar</span>
-                  <CurrencyDisplay amount={pendingOverpayData.overpay} className="font-bold text-blue-700 dark:text-blue-400" />
-                </div>
-                <Separator />
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Deposit saat ini</span>
-                  <CurrencyDisplay amount={vendorDeposit} className="text-muted-foreground" />
-                </div>
-                <div className="flex justify-between text-sm font-semibold">
-                  <span>Deposit setelah ini</span>
-                  <CurrencyDisplay amount={pendingOverpayData.newDeposit} className="text-blue-700 dark:text-blue-400" />
-                </div>
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Kelebihan <strong>Rp {pendingOverpayData.overpay.toLocaleString("id-ID")}</strong> akan otomatis disimpan sebagai deposit vendor.
-              </p>
-              <div className="flex gap-2">
-                <Button variant="outline" className="flex-1" onClick={() => setShowOverpayConfirm(false)}>Batal</Button>
-                <Button className="flex-1 gap-2" onClick={() => {
-                  setShowOverpayConfirm(false)
-                  submitPurchase(pendingOverpayData.data, pendingOverpayData.ids)
-                }}>
-                  <CheckCircle2 className="h-4 w-4" />
-                  Ya, Simpan
-                </Button>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Konfirmasi: nominal kosong = semua jadi hutang */}
-      <Dialog open={showDebtConfirm} onOpenChange={setShowDebtConfirm}>
-        <DialogContent className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <AlertCircle className="h-5 w-5 text-orange-500" />
-              Konfirmasi Hutang
-            </DialogTitle>
-            <DialogDescription>
-              Nominal bayar kosong — seluruh tagihan akan dicatat sebagai hutang ke vendor.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div className="rounded-lg bg-orange-50 dark:bg-orange-950/20 border border-orange-200 dark:border-orange-900/50 p-4 space-y-2">
-              <div className="flex justify-between text-sm font-semibold">
-                <span>Total hutang ke vendor</span>
-                <CurrencyDisplay amount={cartTotal} className="text-orange-700 dark:text-orange-400" />
-              </div>
-            </div>
-            <p className="text-sm text-muted-foreground">
-              Hutang bisa dibayar nanti melalui halaman <strong>Hutang Vendor</strong>.
-            </p>
-            <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={() => setShowDebtConfirm(false)}>
-                Batal
-              </Button>
-              <Button
-                className="flex-1 gap-2 bg-orange-600 hover:bg-orange-700"
-                onClick={() => {
-                  setShowDebtConfirm(false)
-                  if (pendingData) {
-                    const { confirmedPriceUpdates: ids, ...data } = pendingData as CreatePurchaseInput & { confirmedPriceUpdates?: string[] }
-                    submitPurchase(data as CreatePurchaseInput, ids ?? [])
-                  }
-                }}
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                Ya, Catat Hutang
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* Dialog konfirmasi terpusat — menggantikan dialog overpay & debt terpisah */}
+      {pendingData && (
+        <PurchaseConfirmDialog
+          open={showConfirmDialog}
+          onOpenChange={(open) => { if (!open && !isSubmitting) setShowConfirmDialog(false) }}
+          vendorName={vendors.find((v) => v.id === pendingData.vendorId)?.name ?? "Vendor"}
+          purchaseDate={pendingData.purchaseDate}
+          cart={cart}
+          cartTotal={cartTotal}
+          paidAmount={pendingData.paidAmount}
+          paymentMethod={pendingData.paymentMethod ?? "CASH"}
+          isSubmitting={isSubmitting}
+          onConfirm={(receiptImageUrl) => {
+            submitPurchase(pendingData, pendingConfirmedIds, receiptImageUrl)
+          }}
+        />
+      )}
     </>
   )
 }

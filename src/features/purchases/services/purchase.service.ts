@@ -159,6 +159,7 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
         paymentStatus,
         paymentMethod,
         notes: data.notes,
+        receiptImageUrl: data.receiptImageUrl || null,
         purchaseDate: new Date(data.purchaseDate),
       },
     })

@@ -156,6 +156,7 @@ model Purchase {
   paymentStatus PaymentStatus @default(PAID)
   paymentMethod PaymentMethod @default(CASH)
   notes         String?
+  receiptImageUrl String?     // URL foto nota/invoice dari vendor (R2)
   purchaseDate  DateTime      @default(now())
   createdAt     DateTime      @default(now())
   updatedAt     DateTime      @updatedAt
