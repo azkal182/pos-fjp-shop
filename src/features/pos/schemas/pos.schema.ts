@@ -17,16 +17,17 @@ export const createDraftSchema = z.object({
 
 // Schema untuk konfirmasi DRAFT — dengan paidAmount dan packingFee
 export const confirmTransactionSchema = z.object({
-  paidAmount: z.number().min(0),
+  // paidAmount bisa 0 (hutang semua) — coerce dari string/number
+  paidAmount: z.coerce.number().min(0),
   paymentMethod: z.enum(["CASH", "TRANSFER"]),
-  packingFee: z.number().min(0).default(0),
+  packingFee: z.coerce.number().min(0).default(0),
   overpayAction: z.enum(["return", "deposit"]).optional(),
-  depositUsed: z.number().min(0).optional(),
+  depositUsed: z.coerce.number().min(0).optional(),
   depositId: z.string().optional(),
   notes: z.string().optional(),
   // Boleh update items saat konfirmasi (qty/harga bisa berubah)
   items: z.array(draftItemSchema).min(1).optional(),
-  discountAmount: z.number().min(0).optional(),
+  discountAmount: z.coerce.number().min(0).optional(),
 })
 
 // Legacy schema — tetap ada untuk backward compat jika diperlukan

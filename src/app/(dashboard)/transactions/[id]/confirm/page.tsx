@@ -14,6 +14,9 @@ import { PageWrapper } from "@/components/layout/PageWrapper"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog"
 import { useToast } from "@/hooks/useToast"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
@@ -201,6 +204,9 @@ export default function ConfirmTransactionPage() {
   const [depositInfo, setDepositInfo] = useState<DepositInfo | null>(null)
   const [useDepositChecked, setUseDepositChecked] = useState(false)
 
+  // Dialog konfirmasi sebelum submit
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+
   const paidInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -287,6 +293,12 @@ export default function ConfirmTransactionPage() {
       toast.error("Customer walk-in harus membayar lunas")
       return
     }
+    // Buka dialog konfirmasi ringkasan dulu
+    setShowConfirmDialog(true)
+  }
+
+  async function doConfirm() {
+    setShowConfirmDialog(false)
     setIsSubmitting(true)
     try {
       const firstDeposit = depositInfo?.deposits[0]
@@ -294,7 +306,7 @@ export default function ConfirmTransactionPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          paidAmount: paid,
+          paidAmount: paid,  // sudah number (0 jika kosong)
           paymentMethod,
           packingFee,
           overpayAction,
@@ -756,6 +768,130 @@ export default function ConfirmTransactionPage() {
         description={`Order ${transaction.code} akan dibatalkan dan stok yang di-reserve akan dilepas. Lanjutkan?`}
         confirmLabel="Ya, Batalkan"
       />
+
+      {/* Dialog konfirmasi ringkasan sebelum submit */}
+      <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-primary" />
+              Konfirmasi Transaksi
+            </DialogTitle>
+            <DialogDescription>
+              Periksa kembali ringkasan sebelum dikonfirmasi
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            {/* Info order */}
+            <div className="rounded-lg bg-muted/50 px-3 py-2.5 space-y-1 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Order</span>
+                <span className="font-mono font-semibold">{transaction.code}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Customer</span>
+                <span className="font-medium">{transaction.customer?.name ?? "Walk-in"}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Jumlah produk</span>
+                <span>{editItems.length} item</span>
+              </div>
+            </div>
+
+            {/* Ringkasan harga */}
+            <div className="rounded-lg border px-3 py-2.5 space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Subtotal</span>
+                <CurrencyDisplay amount={subtotal} />
+              </div>
+              {discount > 0 && (
+                <div className="flex justify-between text-red-600">
+                  <span>Diskon</span>
+                  <span>−<CurrencyDisplay amount={discount} className="text-sm" /></span>
+                </div>
+              )}
+              {packingFee > 0 && (
+                <div className="flex justify-between text-blue-600">
+                  <span>Biaya packing</span>
+                  <span>+<CurrencyDisplay amount={packingFee} className="text-sm" /></span>
+                </div>
+              )}
+              <Separator />
+              <div className="flex justify-between font-bold">
+                <span>Total</span>
+                <CurrencyDisplay amount={totalAmount} className="font-bold" />
+              </div>
+            </div>
+
+            {/* Ringkasan pembayaran */}
+            <div className="rounded-lg border px-3 py-2.5 space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Metode</span>
+                <span>{paymentMethod === "CASH" ? "Tunai" : "Transfer"}</span>
+              </div>
+              {isAllDebt ? (
+                <div className="flex justify-between font-semibold text-orange-600 dark:text-orange-400">
+                  <span>Status</span>
+                  <span>Hutang semua</span>
+                </div>
+              ) : (
+                <>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Dibayar</span>
+                    <CurrencyDisplay amount={paid} />
+                  </div>
+                  {depositUsed > 0 && (
+                    <div className="flex justify-between text-blue-600">
+                      <span>Deposit dipakai</span>
+                      <CurrencyDisplay amount={depositUsed} className="text-sm" />
+                    </div>
+                  )}
+                  {debtAmount > 0 && (
+                    <div className="flex justify-between font-semibold text-orange-600 dark:text-orange-400">
+                      <span>Hutang</span>
+                      <CurrencyDisplay amount={debtAmount} className="text-sm font-semibold" />
+                    </div>
+                  )}
+                  {overpayAmount > 0 && (
+                    <div className="flex justify-between font-semibold text-green-600">
+                      <span>{overpayAction === "deposit" ? "Deposit" : "Kembalian"}</span>
+                      <CurrencyDisplay amount={overpayAmount} className="text-sm font-semibold" />
+                    </div>
+                  )}
+                  {isFullPay && debtAmount === 0 && overpayAmount === 0 && (
+                    <div className="flex justify-between font-semibold text-green-600">
+                      <span>Status</span>
+                      <span>Lunas</span>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="flex gap-2 pt-1">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowConfirmDialog(false)}
+                disabled={isSubmitting}
+              >
+                Periksa Lagi
+              </Button>
+              <Button
+                className="flex-1 gap-2"
+                onClick={doConfirm}
+                disabled={isSubmitting}
+              >
+                {isSubmitting
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Memproses...</>
+                  : <><CheckCircle2 className="h-4 w-4" /> Ya, Konfirmasi</>
+                }
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </PageWrapper>
   )
 }
