@@ -6,25 +6,19 @@ import type { ReactElement } from "react"
 import type { DocumentProps } from "@react-pdf/renderer"
 
 /**
- * Fetch gambar dari URL dan konversi ke base64 data URI.
- * Diperlukan agar @react-pdf/renderer bisa embed gambar tanpa masalah CORS,
- * karena PDF di-generate di browser dan R2 mungkin tidak set CORS header.
+ * Fetch gambar dari URL via server proxy dan konversi ke base64 data URI.
+ * Menggunakan /api/image-proxy agar tidak kena CORS — server fetch langsung ke R2.
  *
- * Jika fetch gagal (CORS, network error, dll), kembalikan null
- * sehingga PDF tetap bisa di-generate tanpa logo.
+ * Jika gagal, kembalikan null sehingga PDF tetap bisa di-generate tanpa logo.
  */
 export async function fetchImageAsBase64(url: string): Promise<string | null> {
   if (!url) return null
   try {
-    const res = await fetch(url, { mode: "cors", cache: "force-cache" })
+    const proxyUrl = `/api/image-proxy?url=${encodeURIComponent(url)}`
+    const res = await fetch(proxyUrl)
     if (!res.ok) return null
-    const blob = await res.blob()
-    return new Promise((resolve) => {
-      const reader = new FileReader()
-      reader.onloadend = () => resolve(reader.result as string)
-      reader.onerror = () => resolve(null)
-      reader.readAsDataURL(blob)
-    })
+    const json = await res.json()
+    return json.data?.dataUri ?? null
   } catch {
     return null
   }
