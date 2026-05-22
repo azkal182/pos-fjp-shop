@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { pdf } from "@react-pdf/renderer"
 import type { ReactElement } from "react"
+import type { DocumentProps } from "@react-pdf/renderer"
 
 /**
  * Hook untuk generate dan download PDF dari React component.
@@ -14,7 +15,7 @@ export function usePdfExport() {
   async function exportPdf(document: ReactElement, filename: string) {
     setIsGenerating(true)
     try {
-      const blob = await pdf(document).toBlob()
+      const blob = await pdf(document as ReactElement<DocumentProps>).toBlob()
       const url = URL.createObjectURL(blob)
       const a = window.document.createElement("a")
       a.href = url

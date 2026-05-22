@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button"
 import { PageWrapper } from "@/components/layout/PageWrapper"
 import { TransactionDetail } from "@/features/transactions/components/TransactionDetail"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
-import { ReceiptDialog } from "@/features/pos/components/ReceiptDialog"
 import { usePdfExport } from "@/lib/pdf/usePdfExport"
 import { TransactionPdf } from "@/features/transactions/pdf/TransactionPdf"
 import { useSettingsStore } from "@/stores/settings.store"
@@ -19,7 +18,6 @@ export default function TransactionDetailPage() {
 
   const [transaction, setTransaction] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [showReceipt, setShowReceipt] = useState(false)
   const { exportPdf, isGenerating } = usePdfExport()
   const { store, load } = useSettingsStore()
 
@@ -36,8 +34,12 @@ export default function TransactionDetailPage() {
   if (isLoading) return <LoadingSpinner centered />
   if (!transaction) return null
 
-  // Hanya tampilkan tombol print untuk transaksi CONFIRMED
   const isConfirmed = transaction.confirmationStatus === "CONFIRMED"
+
+  function handlePrintReceipt() {
+    // Buka halaman print di tab baru — bersih tanpa dashboard
+    window.open(`/print/receipt/${id}`, "_blank", "noopener,noreferrer")
+  }
 
   async function handleExportPdf() {
     await exportPdf(
@@ -62,7 +64,7 @@ export default function TransactionDetailPage() {
           </Button>
           {isConfirmed && (
             <>
-              <Button variant="outline" onClick={() => setShowReceipt(true)}>
+              <Button variant="outline" onClick={handlePrintReceipt}>
                 <Printer className="h-4 w-4 mr-2" />
                 Print Nota
               </Button>
@@ -76,12 +78,6 @@ export default function TransactionDetailPage() {
       }
     >
       <TransactionDetail transaction={transaction} />
-
-      <ReceiptDialog
-        open={showReceipt}
-        onOpenChange={setShowReceipt}
-        transaction={isConfirmed ? transaction : null}
-      />
     </PageWrapper>
   )
 }

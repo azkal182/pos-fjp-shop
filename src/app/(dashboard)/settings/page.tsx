@@ -4,6 +4,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { StoreSettings } from "@/features/settings/components/StoreSettings"
 import { PosSettings } from "@/features/settings/components/PosSettings"
 import { AgingSettings } from "@/features/settings/components/AgingSettings"
+import { PrinterSettings } from "@/features/settings/components/PrinterSettings"
 
 export const metadata: Metadata = { title: "Pengaturan" }
 
@@ -14,6 +15,7 @@ export default function SettingsPage() {
         <TabsList>
           <TabsTrigger value="store">Toko</TabsTrigger>
           <TabsTrigger value="pos">POS</TabsTrigger>
+          <TabsTrigger value="printer">Printer</TabsTrigger>
           <TabsTrigger value="aging">Aging Hutang</TabsTrigger>
         </TabsList>
 
@@ -31,6 +33,14 @@ export default function SettingsPage() {
             <p className="text-sm text-muted-foreground">Konfigurasi tampilan dan perilaku modul kasir</p>
           </div>
           <PosSettings />
+        </TabsContent>
+
+        <TabsContent value="printer">
+          <div className="space-y-1 mb-5">
+            <h3 className="text-base font-semibold">Pengaturan Printer Thermal</h3>
+            <p className="text-sm text-muted-foreground">Konfigurasi printer nota dan logo struk</p>
+          </div>
+          <PrinterSettings />
         </TabsContent>
 
         <TabsContent value="aging">

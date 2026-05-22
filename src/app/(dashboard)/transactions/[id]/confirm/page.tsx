@@ -360,7 +360,8 @@ export default function ConfirmTransactionPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Gagal konfirmasi")
       toast.success(`Transaksi ${transaction!.code} berhasil dikonfirmasi`)
-      // Tampilkan struk, bukan langsung redirect
+      // Buka halaman print di tab baru, lalu tampilkan dialog pilihan
+      window.open(`/print/receipt/${id}`, "_blank", "noopener,noreferrer")
       setReceiptData(json.data)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Terjadi kesalahan")
