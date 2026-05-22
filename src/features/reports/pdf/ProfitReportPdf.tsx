@@ -11,12 +11,13 @@ interface ProfitReportPdfProps {
   storeName: string
   storeAddress?: string
   storePhone?: string
+  logoUrl?: string
   dateFrom: Date
   dateTo: Date
 }
 
 export function ProfitReportPdf({
-  data, storeName, storeAddress, storePhone, dateFrom, dateTo,
+  data, storeName, storeAddress, storePhone, logoUrl, dateFrom, dateTo,
 }: ProfitReportPdfProps) {
   const period = `${format(dateFrom, "dd MMM yyyy", { locale: idLocale })} – ${format(dateTo, "dd MMM yyyy", { locale: idLocale })}`
 
@@ -27,6 +28,7 @@ export function ProfitReportPdf({
           storeName={storeName}
           storeAddress={storeAddress}
           storePhone={storePhone}
+          logoUrl={logoUrl}
           title="Laporan Laba Rugi"
           period={period}
         />

@@ -7,6 +7,7 @@ interface StoreSettings {
   storeAddress: string
   storePhone: string
   receiptNote: string
+  logoUrl: string
 }
 
 interface PosSettings {
@@ -21,7 +22,7 @@ interface SettingsState {
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
-  store: { storeName: "FJP Shop", storeAddress: "", storePhone: "", receiptNote: "" },
+  store: { storeName: "FJP Shop", storeAddress: "", storePhone: "", receiptNote: "", logoUrl: "" },
   pos: { paymentMethods: ["CASH", "TRANSFER"] },
   isLoaded: false,
 
@@ -40,6 +41,7 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
           storeAddress: storeData["store_address"] ?? "",
           storePhone: storeData["store_phone"] ?? "",
           receiptNote: storeData["store_receipt_note"] ?? "",
+          logoUrl: storeData["store_logo_url"] ?? "",
         },
         pos: {
           paymentMethods: (posData["pos_payment_methods"] ?? "CASH,TRANSFER").split(",").filter(Boolean),

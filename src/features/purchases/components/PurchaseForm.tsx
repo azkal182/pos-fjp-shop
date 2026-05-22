@@ -120,8 +120,9 @@ function ProductSearch({ vendorId, value, onChange, inputRef }: ProductSearchPro
         ref={inputRef}
         value={search}
         autoComplete="off"
-        placeholder="Cari produk..."
+        placeholder={vendorId ? "Cari produk..." : "Pilih vendor dulu..."}
         className="h-9 text-sm"
+        disabled={!vendorId}
         onChange={(e) => { setSearch(e.target.value); setShowDropdown(true); if (!e.target.value) onChange(null) }}
         onFocus={() => search && setShowDropdown(true)}
         onBlur={() => setTimeout(() => setShowDropdown(false), 150)}

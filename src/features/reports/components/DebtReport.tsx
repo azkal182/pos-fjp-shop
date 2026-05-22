@@ -58,6 +58,7 @@ export function DebtReport() {
         storeName={store.storeName || "FJP Shop"}
         storeAddress={store.storeAddress}
         storePhone={store.storePhone}
+        logoUrl={store.logoUrl || undefined}
         totalOutstanding={data.totalOutstanding}
         customersWithDebt={data.totalCustomersWithDebt}
       />,

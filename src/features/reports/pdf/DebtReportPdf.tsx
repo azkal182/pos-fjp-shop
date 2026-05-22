@@ -22,6 +22,7 @@ interface DebtReportPdfProps {
   storeName: string
   storeAddress?: string
   storePhone?: string
+  logoUrl?: string
   totalOutstanding: number
   customersWithDebt: number
 }
@@ -33,7 +34,7 @@ const STATUS_LABELS: Record<string, string> = {
 }
 
 export function DebtReportPdf({
-  debts, storeName, storeAddress, storePhone, totalOutstanding, customersWithDebt,
+  debts, storeName, storeAddress, storePhone, logoUrl, totalOutstanding, customersWithDebt,
 }: DebtReportPdfProps) {
   // Group by customer
   const customerMap = new Map<string, { name: string; phone: string | null; debts: DebtRow[]; total: number }>()
@@ -60,6 +61,7 @@ export function DebtReportPdf({
           storeName={storeName}
           storeAddress={storeAddress}
           storePhone={storePhone}
+          logoUrl={logoUrl}
           title="Laporan Piutang"
           subtitle="Daftar Hutang Customer Aktif"
         />

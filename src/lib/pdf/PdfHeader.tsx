@@ -1,5 +1,5 @@
-import { View, Text } from "@react-pdf/renderer"
-import { shared } from "./styles"
+import { View, Text, Image } from "@react-pdf/renderer"
+import { shared, COLORS } from "./styles"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
 
@@ -7,6 +7,7 @@ interface PdfHeaderProps {
   storeName: string
   storeAddress?: string
   storePhone?: string
+  logoUrl?: string        // URL logo toko dari R2
   title: string
   subtitle?: string
   period?: string
@@ -15,16 +16,24 @@ interface PdfHeaderProps {
 }
 
 export function PdfHeader({
-  storeName, storeAddress, storePhone,
+  storeName, storeAddress, storePhone, logoUrl,
   title, subtitle, period, printedAt, docNumber,
 }: PdfHeaderProps) {
   return (
     <View style={shared.docHeader}>
-      {/* Kiri: info toko */}
-      <View style={shared.docHeaderLeft}>
-        <Text style={shared.storeName}>{storeName}</Text>
-        {storeAddress && <Text style={shared.storeInfo}>{storeAddress}</Text>}
-        {storePhone && <Text style={shared.storeInfo}>Telp: {storePhone}</Text>}
+      {/* Kiri: logo + info toko */}
+      <View style={[shared.docHeaderLeft, { flexDirection: "row", alignItems: "flex-start", gap: 8 }]}>
+        {logoUrl && (
+          <Image
+            src={logoUrl}
+            style={{ width: 40, height: 40, objectFit: "contain" }}
+          />
+        )}
+        <View style={{ flex: 1 }}>
+          <Text style={shared.storeName}>{storeName}</Text>
+          {storeAddress && <Text style={shared.storeInfo}>{storeAddress}</Text>}
+          {storePhone && <Text style={shared.storeInfo}>Telp: {storePhone}</Text>}
+        </View>
       </View>
 
       {/* Kanan: judul dokumen */}

@@ -1,4 +1,4 @@
-import { Document, Page, View, Text } from "@react-pdf/renderer"
+import { Document, Page, View, Text, Image } from "@react-pdf/renderer"
 import { shared, COLORS, formatRp } from "@/lib/pdf/styles"
 import { PdfFooter } from "@/lib/pdf/PdfFooter"
 import { format } from "date-fns"
@@ -35,6 +35,7 @@ interface TransactionPdfProps {
   storeAddress?: string
   storePhone?: string
   storeReceiptNote?: string
+  logoUrl?: string
 }
 
 const STATUS_LABELS: Record<string, string> = {
@@ -50,7 +51,7 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export function TransactionPdf({
-  transaction, storeName, storeAddress, storePhone, storeReceiptNote,
+  transaction, storeName, storeAddress, storePhone, storeReceiptNote, logoUrl,
 }: TransactionPdfProps) {
   const dateStr = format(new Date(transaction.transactionDate), "dd MMMM yyyy HH:mm", { locale: idLocale })
   const statusColor = STATUS_COLORS[transaction.paymentStatus] ?? COLORS.muted
@@ -60,6 +61,9 @@ export function TransactionPdf({
       <Page size="A5" style={[shared.page, { paddingHorizontal: 30, paddingTop: 30 }]}>
         {/* Header toko */}
         <View style={{ alignItems: "center", marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1.5, borderBottomColor: COLORS.primary }}>
+          {logoUrl && (
+            <Image src={logoUrl} style={{ width: 48, height: 48, objectFit: "contain", marginBottom: 4 }} />
+          )}
           <Text style={{ fontSize: 16, fontFamily: "Helvetica-Bold", color: COLORS.primary, marginBottom: 3 }}>
             {storeName}
           </Text>

@@ -1,11 +1,12 @@
 import { prisma } from "@/lib/prisma"
-import { format, startOfDay, endOfDay, startOfWeek, subDays } from "date-fns"
+import { format, startOfWeek, subDays } from "date-fns"
+import { startOfDayWIB, endOfDayWIB, formatDateWIB, parseDateWIB } from "@/lib/timezone"
 import { getAgingCategories } from "@/features/debts/services/debt-aging.service"
 import { classifyDebtClient } from "@/features/debts/utils/aging.utils"
 import type { SalesReport, ProductReportItem, DebtReport, ProfitReport } from "../types/report.types"
 
 function parseDate(d?: string): Date | undefined {
-  return d ? new Date(d) : undefined
+  return d ? parseDateWIB(d) : undefined
 }
 
 // ─── Sales Report ─────────────────────────────────────────────────────────────
@@ -23,7 +24,7 @@ export async function getSalesReport(
   const transactions = await prisma.transaction.findMany({
     where: {
       confirmationStatus: "CONFIRMED",
-      transactionDate: { gte: startOfDay(from), lte: endOfDay(to) },
+      transactionDate: { gte: startOfDayWIB(from), lte: endOfDayWIB(to) },
     },
     select: {
       totalAmount: true,
@@ -38,7 +39,7 @@ export async function getSalesReport(
   // 2. Pembayaran hutang yang diterima dalam periode (Cash Basis tambahan)
   const debtPayments = await prisma.customerPayment.findMany({
     where: {
-      paymentDate: { gte: startOfDay(from), lte: endOfDay(to) },
+      paymentDate: { gte: startOfDayWIB(from), lte: endOfDayWIB(to) },
       source: "DIRECT",  // hanya pembayaran manual, bukan dari POS overpay
     },
     select: { amount: true, paymentDate: true },
@@ -50,9 +51,9 @@ export async function getSalesReport(
   }>()
 
   function getKey(date: Date): string {
-    if (groupBy === "month") return format(date, "yyyy-MM")
-    if (groupBy === "week") return format(startOfWeek(date, { weekStartsOn: 1 }), "yyyy-MM-dd")
-    return format(date, "yyyy-MM-dd")
+    if (groupBy === "month") return formatDateWIB(date).slice(0, 7) // YYYY-MM
+    if (groupBy === "week") return formatDateWIB(startOfWeek(date, { weekStartsOn: 1 }))
+    return formatDateWIB(date)
   }
 
   for (const trx of transactions) {
@@ -103,7 +104,7 @@ export async function getSalesReport(
   const prevTrx = await prisma.transaction.aggregate({
     where: {
       confirmationStatus: "CONFIRMED",
-      transactionDate: { gte: startOfDay(prevFrom), lte: endOfDay(prevTo) },
+      transactionDate: { gte: startOfDayWIB(prevFrom), lte: endOfDayWIB(prevTo) },
     },
     _sum: { totalAmount: true },
   })
@@ -140,7 +141,7 @@ export async function getProductReport(
     where: {
       transaction: {
         confirmationStatus: "CONFIRMED",
-        transactionDate: { gte: startOfDay(from), lte: endOfDay(to) },
+        transactionDate: { gte: startOfDayWIB(from), lte: endOfDayWIB(to) },
       },
       ...(categoryId && { product: { categoryId } }),
     },
@@ -233,7 +234,7 @@ export async function getProfitReport(
   const transactions = await prisma.transaction.findMany({
     where: {
       confirmationStatus: "CONFIRMED",
-      transactionDate: { gte: startOfDay(from), lte: endOfDay(to) },
+      transactionDate: { gte: startOfDayWIB(from), lte: endOfDayWIB(to) },
     },
     select: {
       id: true,
@@ -262,7 +263,7 @@ export async function getProfitReport(
   // Pembayaran hutang yang diterima dalam periode
   const debtPayments = await prisma.customerPayment.findMany({
     where: {
-      paymentDate: { gte: startOfDay(from), lte: endOfDay(to) },
+      paymentDate: { gte: startOfDayWIB(from), lte: endOfDayWIB(to) },
       source: "DIRECT",
     },
     select: { amount: true, paymentDate: true },
@@ -281,7 +282,7 @@ export async function getProfitReport(
     const trx = trxMap.get(item.transactionId)
     if (!trx) continue
 
-    const date = format(trx.transactionDate, "yyyy-MM-dd")
+    const date = formatDateWIB(trx.transactionDate)
     const qty = item.quantity
     const revenue = Number(item.sellPrice) * qty - Number(item.discountAmount) * qty
     const hpp = Number(item.buyPrice) * qty
@@ -308,7 +309,7 @@ export async function getProfitReport(
     if (!trx) continue
 
     const packing = Number(trx.packingFee ?? 0)
-    const date = format(trx.transactionDate, "yyyy-MM-dd")
+    const date = formatDateWIB(trx.transactionDate)
     totalNewDebt += Number(trx.debtAmount)
 
     if (packing > 0) {
@@ -335,7 +336,7 @@ export async function getProfitReport(
   // Tambahkan pembayaran hutang ke cashRevenue per hari
   let totalDebtPaymentsReceived = 0
   for (const payment of debtPayments) {
-    const date = format(payment.paymentDate, "yyyy-MM-dd")
+    const date = formatDateWIB(payment.paymentDate)
     const amount = Number(payment.amount)
     totalDebtPaymentsReceived += amount
     const existing = byDay.get(date) ?? { revenue: 0, cashRevenue: 0, hpp: 0, profit: 0, cashProfit: 0 }

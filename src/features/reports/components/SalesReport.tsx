@@ -54,6 +54,7 @@ export function SalesReport() {
         storeName={store.storeName || "FJP Shop"}
         storeAddress={store.storeAddress}
         storePhone={store.storePhone}
+        logoUrl={store.logoUrl || undefined}
         dateFrom={dateFrom}
         dateTo={dateTo}
       />,

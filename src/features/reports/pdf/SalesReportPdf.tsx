@@ -11,12 +11,13 @@ interface SalesReportPdfProps {
   storeName: string
   storeAddress?: string
   storePhone?: string
+  logoUrl?: string
   dateFrom: Date
   dateTo: Date
 }
 
 export function SalesReportPdf({
-  data, storeName, storeAddress, storePhone, dateFrom, dateTo,
+  data, storeName, storeAddress, storePhone, logoUrl, dateFrom, dateTo,
 }: SalesReportPdfProps) {
   const period = `${format(dateFrom, "dd MMM yyyy", { locale: idLocale })} – ${format(dateTo, "dd MMM yyyy", { locale: idLocale })}`
 
@@ -31,6 +32,7 @@ export function SalesReportPdf({
           storeName={storeName}
           storeAddress={storeAddress}
           storePhone={storePhone}
+          logoUrl={logoUrl}
           title="Laporan Penjualan"
           period={period}
         />

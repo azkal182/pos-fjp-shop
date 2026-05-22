@@ -4,12 +4,23 @@
  *
  * Format: PREFIX-YYYYMMDD-XXXX (4 digit, reset tiap hari)
  * Contoh: TRX-20260522-0001, PO-20260522-0042
+ *
+ * Tanggal menggunakan WIB (UTC+7) agar kode sesuai hari kalender Indonesia.
  */
 import { prisma } from "@/lib/prisma"
 
-export async function generateSequentialCode(prefix: string): Promise<string> {
+/** Kembalikan tanggal dalam format YYYYMMDD berdasarkan timezone WIB (UTC+7) */
+function getWIBDateStr(): string {
   const now = new Date()
-  const dateStr = now.toISOString().slice(0, 10).replace(/-/g, "")
+  // Offset WIB = UTC+7 = 7 * 60 * 60 * 1000 ms
+  const wibOffset = 7 * 60 * 60 * 1000
+  const wibDate = new Date(now.getTime() + wibOffset)
+  // toISOString() sekarang mengembalikan waktu WIB dalam format UTC string
+  return wibDate.toISOString().slice(0, 10).replace(/-/g, "")
+}
+
+export async function generateSequentialCode(prefix: string): Promise<string> {
+  const dateStr = getWIBDateStr()
 
   let maxSeq = 0
 
