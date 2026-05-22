@@ -18,10 +18,11 @@ export async function getAllTransactions(filter: TransactionFilter = {}) {
   const where = {
     ...(customerId && { customerId }),
     ...(paymentStatus && { paymentStatus: paymentStatus as any }),
-    // Default: tampilkan semua kecuali CANCELLED jika tidak ada filter status
+    // Default: hanya tampilkan CONFIRMED (riwayat transaksi selesai)
+    // DRAFT ada di /transactions/pending, CANCELLED tidak ditampilkan
     ...(confirmationStatus
       ? { confirmationStatus: confirmationStatus as any }
-      : { confirmationStatus: { in: ["DRAFT", "CONFIRMED"] as any[] } }
+      : { confirmationStatus: "CONFIRMED" as any }
     ),
     ...((dateFrom || dateTo) && {
       transactionDate: {
