@@ -167,7 +167,7 @@ export default function ProductDetailPage() {
     >
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Info Produk */}
-        <div className="lg:col-span-1 space-y-4">
+        <div className="lg:col-span-1 space-y-4 min-w-0">
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center gap-3">
@@ -229,7 +229,7 @@ export default function ProductDetailPage() {
         </div>
 
         {/* Riwayat Stok */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 min-w-0">
           <Tabs defaultValue="movements">
             <TabsList>
               <TabsTrigger value="movements">Pergerakan Stok</TabsTrigger>

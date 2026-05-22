@@ -26,11 +26,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   return (
     <SidebarProvider>
       <AppSidebar />
-      <SidebarInset>
+      <SidebarInset className="min-w-0 overflow-hidden">
         <SidebarAutoClose>
           <Header />
           <BreadcrumbBar />
-          <main className="flex flex-1 flex-col gap-4 p-0 overflow-y-auto">
+          <main className="flex flex-1 flex-col gap-4 p-0 overflow-y-auto overflow-x-hidden min-w-0">
             {children}
           </main>
         </SidebarAutoClose>

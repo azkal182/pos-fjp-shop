@@ -89,7 +89,7 @@ export default function VendorDetailPage() {
     >
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Sidebar */}
-        <div className="space-y-4">
+        <div className="space-y-4 min-w-0">
           <div className="rounded-xl border bg-card p-4 space-y-2">
             <p className="font-semibold">{vendor.name}</p>
             {vendor.phone && <p className="text-sm text-muted-foreground">{vendor.phone}</p>}
@@ -109,7 +109,7 @@ export default function VendorDetailPage() {
         </div>
 
         {/* Main */}
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 min-w-0">
           <Tabs defaultValue="purchases">
             <TabsList className="w-full">
               <TabsTrigger value="purchases" className="flex-1">Riwayat Pembelian</TabsTrigger>
