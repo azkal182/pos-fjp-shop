@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft, Loader2, CreditCard, Package, Wallet,
-  AlertCircle, CheckCircle2, X, Banknote,
+  AlertCircle, CheckCircle2, X, Banknote, Trash2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -15,18 +15,16 @@ import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
 import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
 import { useToast } from "@/hooks/useToast"
-import { useDebounce } from "@/hooks/useDebounce"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
 
-interface TransactionItem {
+interface EditableItem {
   id: string
   productId: string
   productName: string
   quantity: number
   sellPrice: number
   discountAmount: number
-  subtotal: number
 }
 
 interface Transaction {
@@ -39,7 +37,7 @@ interface Transaction {
   totalAmount: number
   confirmationStatus: string
   transactionDate: string
-  items: TransactionItem[]
+  items: EditableItem[]
 }
 
 interface DepositInfo {
@@ -76,8 +74,12 @@ export default function ConfirmTransactionPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isCancelOpen, setIsCancelOpen] = useState(false)
 
+  // Editable items state — diinisialisasi dari transaksi
+  const [editItems, setEditItems] = useState<EditableItem[]>([])
+  const [discount, setDiscount] = useState(0)
+
   // Payment state
-  const [paidAmount, setPaidAmount] = useState(0)
+  const [paidAmount, setPaidAmount] = useState<number | "">("")
   const [paymentMethod, setPaymentMethod] = useState<"CASH" | "TRANSFER">("CASH")
   const [packingFee, setPackingFee] = useState(0)
   const [overpayAction, setOverpayAction] = useState<"return" | "deposit">("return")
@@ -98,7 +100,8 @@ export default function ConfirmTransactionPage() {
           return
         }
         setTransaction(trx)
-        // Fetch deposit customer jika ada
+        setEditItems(trx.items.map((i: EditableItem) => ({ ...i })))
+        setDiscount(Number(trx.discountAmount))
         if (trx.customerId) {
           fetch(`/api/customers/${trx.customerId}/deposit`)
             .then((r) => r.json())
@@ -112,21 +115,42 @@ export default function ConfirmTransactionPage() {
 
   if (isLoading || !transaction) return <LoadingSpinner centered />
 
-  // Kalkulasi real-time
-  const subtotal = transaction.items.reduce(
+  // Kalkulasi real-time dari editItems
+  const subtotal = editItems.reduce(
     (s, i) => s + (i.sellPrice - i.discountAmount) * i.quantity, 0
   )
-  const discount = Number(transaction.discountAmount)
   const totalAmount = subtotal - discount + packingFee
+  const paid = paidAmount === "" ? 0 : paidAmount
   const depositUsed = useDepositChecked && depositInfo
-    ? Math.min(depositInfo.totalBalance, Math.max(0, totalAmount - paidAmount))
+    ? Math.min(depositInfo.totalBalance, Math.max(0, totalAmount - paid))
     : 0
-  const effectivePaid = paidAmount + depositUsed
+  const effectivePaid = paid + depositUsed
   const debtAmount = Math.max(0, totalAmount - effectivePaid)
   const overpayAmount = Math.max(0, effectivePaid - totalAmount)
   const isFullPay = effectivePaid >= totalAmount && overpayAmount === 0
-  const suggests = generateSuggests(totalAmount)
   const isWalkIn = !transaction.customerId
+  // Hutang semua = nominal kosong + ada customer
+  const isAllDebt = paidAmount === "" && !isWalkIn
+
+  const suggests = generateSuggests(totalAmount)
+
+  // Tombol konfirmasi bisa diklik jika:
+  // - Ada customer + nominal kosong (hutang semua) ATAU
+  // - Nominal > 0 (bayar sebagian/lunas)
+  // - Walk-in harus bayar lunas
+  const canConfirm = !isSubmitting && editItems.length > 0 && (
+    isAllDebt || (paid > 0 && !(isWalkIn && debtAmount > 0))
+  )
+
+  function updateItem(idx: number, field: keyof EditableItem, value: number) {
+    setEditItems((prev) => prev.map((item, i) =>
+      i === idx ? { ...item, [field]: value } : item
+    ))
+  }
+
+  function removeItem(idx: number) {
+    setEditItems((prev) => prev.filter((_, i) => i !== idx))
+  }
 
   async function handleConfirm() {
     if (isWalkIn && debtAmount > 0) {
@@ -140,12 +164,20 @@ export default function ConfirmTransactionPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          paidAmount,
+          paidAmount: paid,
           paymentMethod,
           packingFee,
           overpayAction,
           depositUsed,
           depositId: useDepositChecked && firstDeposit ? firstDeposit.id : undefined,
+          // Kirim items yang sudah diedit
+          items: editItems.map((i) => ({
+            productId: i.productId,
+            quantity: i.quantity,
+            sellPrice: i.sellPrice,
+            discountAmount: i.discountAmount,
+          })),
+          discountAmount: discount,
         }),
       })
       const json = await res.json()
@@ -193,10 +225,10 @@ export default function ConfirmTransactionPage() {
       }
     >
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 items-start">
-        {/* ── Kiri: Detail order ── */}
+        {/* ── Kiri: Item order (editable) ── */}
         <div className="space-y-4">
           {/* Info order */}
-          <div className="rounded-xl border bg-card p-4 space-y-3">
+          <div className="rounded-xl border bg-card p-4">
             <div className="flex items-center justify-between">
               <div>
                 <p className="font-semibold">{transaction.code}</p>
@@ -211,41 +243,113 @@ export default function ConfirmTransactionPage() {
             </div>
           </div>
 
-          {/* Daftar item */}
+          {/* Tabel item — editable */}
           <div className="rounded-xl border bg-card overflow-hidden">
             <div className="px-4 py-3 border-b bg-muted/30 flex items-center gap-2">
               <Package className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-semibold">Item Order</span>
+              <span className="text-xs text-muted-foreground ml-auto">Qty dan harga bisa diubah</span>
             </div>
-            <div className="hidden sm:grid grid-cols-[1fr_60px_100px_90px] gap-2 px-4 py-2 bg-muted/20 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b">
+
+            {/* Header kolom */}
+            <div className="hidden sm:grid grid-cols-[1fr_80px_120px_90px_32px] gap-2 px-4 py-2 bg-muted/20 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b">
               <span>Produk</span>
               <span className="text-center">Qty</span>
-              <span className="text-right">Harga</span>
+              <span>Harga Jual</span>
               <span className="text-right">Subtotal</span>
+              <span />
             </div>
+
             <div className="divide-y">
-              {transaction.items.map((item) => (
-                <div key={item.id} className="grid grid-cols-[1fr_60px_100px_90px] gap-2 px-4 py-3 items-center text-sm">
-                  <div className="min-w-0">
-                    <p className="font-medium truncate">{item.productName}</p>
-                    {item.discountAmount > 0 && (
-                      <p className="text-xs text-muted-foreground">
-                        Disc: <CurrencyDisplay amount={item.discountAmount} className="text-xs" />
-                      </p>
-                    )}
-                  </div>
-                  <p className="text-center text-muted-foreground">{item.quantity}</p>
-                  <CurrencyDisplay amount={item.sellPrice} className="text-right text-sm" />
-                  <CurrencyDisplay amount={item.subtotal} className="text-right text-sm font-semibold" />
+              {editItems.length === 0 ? (
+                <div className="px-4 py-10 text-center">
+                  <p className="text-sm text-muted-foreground">Semua item dihapus</p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">Tambahkan item atau batalkan order</p>
                 </div>
-              ))}
+              ) : (
+                editItems.map((item, idx) => {
+                  const itemSubtotal = (item.sellPrice - item.discountAmount) * item.quantity
+                  return (
+                    <div key={item.id} className="grid grid-cols-[1fr_80px_120px_90px_32px] gap-2 px-4 py-2.5 items-center">
+                      {/* Nama produk */}
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium truncate">{item.productName}</p>
+                        {item.discountAmount > 0 && (
+                          <p className="text-xs text-muted-foreground">
+                            Disc: <CurrencyDisplay amount={item.discountAmount} className="text-xs" />
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Qty editable */}
+                      <Input
+                        type="number"
+                        min={1}
+                        value={item.quantity}
+                        onChange={(e) => updateItem(idx, "quantity", Math.max(1, parseInt(e.target.value) || 1))}
+                        onFocus={(e) => e.target.select()}
+                        className="h-8 text-sm text-center px-1"
+                      />
+
+                      {/* Harga jual editable */}
+                      <div className="relative">
+                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">Rp</span>
+                        <Input
+                          type="number"
+                          min={0}
+                          value={item.sellPrice}
+                          onChange={(e) => updateItem(idx, "sellPrice", parseFloat(e.target.value) || 0)}
+                          onFocus={(e) => e.target.select()}
+                          className="h-8 text-sm pl-6"
+                        />
+                      </div>
+
+                      {/* Subtotal */}
+                      <CurrencyDisplay amount={itemSubtotal} className="text-right text-sm font-semibold" />
+
+                      {/* Hapus */}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                        onClick={() => removeItem(idx)}
+                        disabled={editItems.length <= 1}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  )
+                })
+              )}
             </div>
-            <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/20">
-              <span className="text-sm text-muted-foreground">{transaction.items.length} produk</span>
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">Subtotal:</span>
-                <CurrencyDisplay amount={subtotal} className="text-base font-bold" />
+
+            {/* Footer subtotal */}
+            {editItems.length > 0 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/20">
+                <span className="text-sm text-muted-foreground">{editItems.length} produk</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Subtotal:</span>
+                  <CurrencyDisplay amount={subtotal} className="text-base font-bold" />
+                </div>
               </div>
+            )}
+          </div>
+
+          {/* Diskon order */}
+          <div className="rounded-xl border bg-card p-4 space-y-2">
+            <Label className="text-xs">Diskon Order <span className="text-muted-foreground">(opsional)</span></Label>
+            <div className="relative">
+              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
+              <Input
+                type="number"
+                min={0}
+                placeholder="0"
+                value={discount || ""}
+                onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                onFocus={(e) => e.target.select()}
+                className="pl-9 h-9"
+              />
             </div>
           </div>
         </div>
@@ -342,23 +446,42 @@ export default function ConfirmTransactionPage() {
 
             {/* Nominal bayar */}
             <div className="space-y-1.5">
-              <Label className="text-xs">Nominal Bayar</Label>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Nominal Bayar</Label>
+                {!isWalkIn && (
+                  <span className="text-xs text-muted-foreground">Kosong = hutang semua</span>
+                )}
+              </div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
                 <Input
                   ref={paidInputRef}
                   type="number"
                   min={0}
-                  placeholder="0"
-                  value={paidAmount || ""}
-                  onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
+                  placeholder={isWalkIn ? "Wajib diisi" : "0 = hutang semua"}
+                  value={paidAmount === "" ? "" : paidAmount}
+                  onChange={(e) => setPaidAmount(e.target.value === "" ? "" : parseFloat(e.target.value) || 0)}
                   onFocus={(e) => e.target.select()}
                   className="pl-9 h-12 text-xl font-bold"
                   autoFocus
                 />
               </div>
+
               {/* Quick fill */}
               <div className="flex flex-wrap gap-1.5">
+                {!isWalkIn && (
+                  <button
+                    type="button"
+                    onClick={() => setPaidAmount("")}
+                    className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors ${
+                      paidAmount === ""
+                        ? "border-orange-400 bg-orange-50 text-orange-700 dark:bg-orange-950/30 dark:text-orange-400"
+                        : "border-border hover:bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    Hutang
+                  </button>
+                )}
                 {suggests.map((s) => (
                   <button
                     key={s} type="button"
@@ -379,15 +502,26 @@ export default function ConfirmTransactionPage() {
             </div>
 
             {/* Status kalkulasi */}
-            {(paidAmount > 0 || depositUsed > 0) && (
+            {(paid > 0 || depositUsed > 0 || isAllDebt) && (
               <div className={`rounded-lg border p-3 space-y-1.5 text-sm ${
-                overpayAmount > 0
+                isAllDebt
+                  ? "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-900/50"
+                  : overpayAmount > 0
                   ? "bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-900/50"
                   : isFullPay
                   ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900/50"
                   : "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-900/50"
               }`}>
-                {debtAmount > 0 && (
+                {isAllDebt && (
+                  <div className="flex items-center justify-between">
+                    <span className="flex items-center gap-1.5 text-orange-700 dark:text-orange-400 font-medium">
+                      <AlertCircle className="h-3.5 w-3.5" />
+                      Semua jadi hutang
+                    </span>
+                    <CurrencyDisplay amount={totalAmount} className="text-sm font-bold text-orange-700 dark:text-orange-400" />
+                  </div>
+                )}
+                {!isAllDebt && debtAmount > 0 && (
                   <div className="flex items-center justify-between">
                     <span className={`flex items-center gap-1.5 font-medium ${isWalkIn ? "text-destructive" : "text-orange-700 dark:text-orange-400"}`}>
                       <AlertCircle className="h-3.5 w-3.5" />
@@ -396,13 +530,13 @@ export default function ConfirmTransactionPage() {
                     {!isWalkIn && <CurrencyDisplay amount={debtAmount} className="text-sm font-bold text-orange-700 dark:text-orange-400" />}
                   </div>
                 )}
-                {isFullPay && (
+                {!isAllDebt && isFullPay && (
                   <div className="flex items-center gap-1.5 text-green-700 dark:text-green-400 font-medium">
                     <CheckCircle2 className="h-3.5 w-3.5" />
                     Lunas
                   </div>
                 )}
-                {overpayAmount > 0 && (
+                {!isAllDebt && overpayAmount > 0 && (
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400 font-medium">
                       <Wallet className="h-3.5 w-3.5" />
@@ -448,7 +582,7 @@ export default function ConfirmTransactionPage() {
             {/* Tombol konfirmasi */}
             <Button
               className="w-full h-11 gap-2 text-base font-semibold"
-              disabled={isSubmitting || paidAmount <= 0 || (isWalkIn && debtAmount > 0)}
+              disabled={!canConfirm}
               onClick={handleConfirm}
             >
               {isSubmitting
@@ -456,6 +590,12 @@ export default function ConfirmTransactionPage() {
                 : <><CheckCircle2 className="h-4 w-4" /> Konfirmasi Pembayaran</>
               }
             </Button>
+
+            {isAllDebt && (
+              <p className="text-xs text-center text-muted-foreground">
+                Seluruh tagihan akan dicatat sebagai hutang customer
+              </p>
+            )}
           </div>
         </div>
       </div>
