@@ -27,7 +27,7 @@ export function DebtReport() {
   const [data, setData] = useState<DebtReportType | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const { exportPdf, isGenerating } = usePdfExport()
-  const { store, reload } = useSettingsStore()
+  const { reload } = useSettingsStore()
 
   useEffect(() => {
     fetch("/api/reports/debts")

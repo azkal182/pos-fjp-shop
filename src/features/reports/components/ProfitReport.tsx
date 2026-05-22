@@ -28,7 +28,7 @@ export function ProfitReport() {
   const [isLoading, setIsLoading] = useState(false)
   const [currentFilters, setCurrentFilters] = useState<any>(null)
   const { exportPdf, isGenerating } = usePdfExport()
-  const { store, reload } = useSettingsStore()
+  const { reload } = useSettingsStore()
 
   const fetchData = useCallback(async (filters: any) => {
     setIsLoading(true)

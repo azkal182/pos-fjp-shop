@@ -26,7 +26,7 @@ export function SalesReport() {
   const [isLoading, setIsLoading] = useState(false)
   const [currentFilters, setCurrentFilters] = useState<any>(null)
   const { exportPdf, isGenerating } = usePdfExport()
-  const { store, reload } = useSettingsStore()
+  const { reload } = useSettingsStore()
 
   const fetchData = useCallback(async (filters: any) => {
     setIsLoading(true)
@@ -45,13 +45,11 @@ export function SalesReport() {
   async function handleExportPdf() {
     if (!data) return
     await reload()
-    // Baca state terbaru langsung dari store, bukan dari closure React
     const freshStore = useSettingsStore.getState().store
     const dateFrom = currentFilters?.dateFrom ?? new Date(Date.now() - 30 * 86400000)
     const dateTo = currentFilters?.dateTo ?? new Date()
     const filename = `laporan-penjualan-${format(dateFrom, "yyyyMMdd")}-${format(dateTo, "yyyyMMdd")}.pdf`
     const logoBase64 = freshStore.logoUrl ? await fetchImageAsBase64(freshStore.logoUrl) : null
-    console.log("[PDF Export] store:", { storeName: freshStore.storeName, storeAddress: freshStore.storeAddress, logoUrl: freshStore.logoUrl, logoBase64: logoBase64 ? `${logoBase64.slice(0, 40)}...` : null })
     await exportPdf(
       <SalesReportPdf
         data={data}
