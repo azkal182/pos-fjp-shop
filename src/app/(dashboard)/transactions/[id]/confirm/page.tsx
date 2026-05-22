@@ -17,6 +17,7 @@ import { ConfirmDialog } from "@/components/shared/ConfirmDialog"
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog"
+import { ReceiptDialog, type ReceiptData } from "@/features/pos/components/ReceiptDialog"
 import { useToast } from "@/hooks/useToast"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
@@ -207,6 +208,8 @@ export default function ConfirmTransactionPage() {
 
   // Dialog konfirmasi sebelum submit
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
+  // Struk setelah konfirmasi berhasil
+  const [receiptData, setReceiptData] = useState<ReceiptData | null>(null)
 
   const paidInputRef = useRef<HTMLInputElement>(null)
 
@@ -339,7 +342,7 @@ export default function ConfirmTransactionPage() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          paidAmount: paid,  // sudah number (0 jika kosong)
+          paidAmount: paid,
           paymentMethod,
           packingFee,
           overpayAction,
@@ -357,7 +360,8 @@ export default function ConfirmTransactionPage() {
       const json = await res.json()
       if (!res.ok) throw new Error(json.error ?? "Gagal konfirmasi")
       toast.success(`Transaksi ${transaction!.code} berhasil dikonfirmasi`)
-      router.push(`/transactions/${id}`)
+      // Tampilkan struk, bukan langsung redirect
+      setReceiptData(json.data)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Terjadi kesalahan")
     } finally {
@@ -931,6 +935,23 @@ export default function ConfirmTransactionPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Struk setelah konfirmasi berhasil */}
+      <ReceiptDialog
+        open={!!receiptData}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReceiptData(null)
+            router.push(`/transactions/${id}`)
+          }
+        }}
+        transaction={receiptData}
+        onNewTransaction={() => {
+          setReceiptData(null)
+          router.push("/pos")
+        }}
+        newTransactionLabel="Order Baru"
+      />
     </PageWrapper>
   )
 }
