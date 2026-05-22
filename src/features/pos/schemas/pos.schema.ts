@@ -2,16 +2,16 @@ import { z } from "zod"
 
 export const draftItemSchema = z.object({
   productId: z.string().min(1),
-  quantity: z.number().int().min(1),
-  sellPrice: z.number().min(0),
-  discountAmount: z.number().min(0).default(0),
+  quantity: z.coerce.number().int().min(1),
+  sellPrice: z.coerce.number().min(0),
+  discountAmount: z.coerce.number().min(0).default(0),
 })
 
 // Schema untuk membuat DRAFT — tanpa paidAmount, tanpa packingFee
 export const createDraftSchema = z.object({
   customerId: z.string().optional().nullable(),
   items: z.array(draftItemSchema).min(1, "Minimal 1 item"),
-  discountAmount: z.number().min(0).default(0),
+  discountAmount: z.coerce.number().min(0).default(0),
   notes: z.string().optional(),
 })
 
@@ -35,12 +35,12 @@ export const checkoutItemSchema = draftItemSchema
 export const checkoutSchema = z.object({
   customerId: z.string().optional().nullable(),
   items: z.array(draftItemSchema).min(1, "Minimal 1 item"),
-  paidAmount: z.number().min(0),
+  paidAmount: z.coerce.number().min(0),
   paymentMethod: z.enum(["CASH", "TRANSFER"]),
-  discountAmount: z.number().min(0),
+  discountAmount: z.coerce.number().min(0),
   notes: z.string().optional(),
   overpayAction: z.enum(["return", "deposit"]).optional(),
-  depositUsed: z.number().min(0).optional(),
+  depositUsed: z.coerce.number().min(0).optional(),
   depositId: z.string().optional(),
 })
 
