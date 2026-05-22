@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useCallback } from "react"
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts"
 import { ReportFilters } from "./ReportFilters"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { DataTable, type Column } from "@/components/shared/DataTable"
@@ -42,39 +42,90 @@ export function SalesReport() {
       },
     },
     { header: "Transaksi", render: (row) => <span className="text-sm">{row.transactionCount}</span> },
-    { header: "Revenue", render: (row) => <CurrencyDisplay amount={row.totalRevenue} className="font-semibold" /> },
+    {
+      header: "Nilai Penjualan",
+      render: (row) => <CurrencyDisplay amount={row.totalRevenue} className="font-semibold" />,
+    },
+    {
+      header: "Kas Masuk",
+      render: (row) => <CurrencyDisplay amount={row.cashCollected} className="font-semibold text-green-600" />,
+    },
+    {
+      header: "Piutang Baru",
+      render: (row) => row.newDebt > 0
+        ? <CurrencyDisplay amount={row.newDebt} className="text-sm text-orange-600" />
+        : <span className="text-xs text-muted-foreground">—</span>,
+    },
   ]
 
   return (
     <div className="space-y-6">
       <ReportFilters onFilter={fetchData} showGroupBy />
 
-      {/* Summary */}
+      {/* Summary — dual: accrual + cash */}
       {data && (
-        <div className="grid grid-cols-3 gap-4">
-          {[
-            { label: "Total Revenue", value: <CurrencyDisplay amount={data.totalRevenue} className="text-xl font-bold" /> },
-            { label: "Total Transaksi", value: <p className="text-xl font-bold">{data.totalTransactions}</p> },
-            { label: "Rata-rata / Transaksi", value: <CurrencyDisplay amount={data.totalTransactions > 0 ? data.totalRevenue / data.totalTransactions : 0} className="text-xl font-bold" /> },
-          ].map((item) => (
-            <div key={item.label} className="rounded-lg border bg-card p-4">
-              <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{item.label}</p>
-              {item.value}
+        <div className="space-y-3">
+          {/* Accrual */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              Nilai Penjualan (Accrual)
+            </p>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+              {[
+                { label: "Total Nilai Penjualan", value: data.totalRevenue },
+                { label: "Total Transaksi", value: data.totalTransactions, isCount: true },
+                { label: "Rata-rata / Transaksi", value: data.totalTransactions > 0 ? data.totalRevenue / data.totalTransactions : 0 },
+              ].map((item) => (
+                <div key={item.label} className="rounded-lg border bg-card p-4">
+                  <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">{item.label}</p>
+                  {item.isCount
+                    ? <p className="text-xl font-bold">{item.value}</p>
+                    : <CurrencyDisplay amount={item.value} className="text-xl font-bold" />
+                  }
+                </div>
+              ))}
             </div>
-          ))}
+          </div>
+
+          {/* Cash Basis */}
+          <div>
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+              Kas Masuk (Cash Basis)
+            </p>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="rounded-lg border border-green-200 dark:border-green-900/50 bg-card p-4">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Total Kas Masuk</p>
+                <CurrencyDisplay amount={data.totalCashCollected} className="text-xl font-bold text-green-600" />
+                <p className="text-xs text-muted-foreground mt-0.5">Tunai + bayar hutang</p>
+              </div>
+              <div className="rounded-lg border border-orange-200 dark:border-orange-900/50 bg-card p-4">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Piutang Baru</p>
+                <CurrencyDisplay amount={data.totalNewDebt} className="text-xl font-bold text-orange-600" />
+                <p className="text-xs text-muted-foreground mt-0.5">Belum dibayar</p>
+              </div>
+              <div className="rounded-lg border bg-card p-4">
+                <p className="text-xs text-muted-foreground uppercase tracking-wide mb-1">Bayar Hutang Lama</p>
+                <CurrencyDisplay amount={data.totalDebtPaymentsReceived} className="text-xl font-bold" />
+                <p className="text-xs text-muted-foreground mt-0.5">Dari cicilan customer</p>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
-      {/* Chart */}
+      {/* Chart — dual bar */}
       {isLoading ? <Skeleton className="h-48 w-full" /> : data && data.data.length > 0 && (
         <div className="rounded-lg border bg-card p-4">
-          <ResponsiveContainer width="100%" height={200}>
-            <BarChart data={data.data}>
+          <p className="text-xs text-muted-foreground mb-3">Nilai Penjualan vs Kas Masuk per periode</p>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={data.data} barGap={2}>
               <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
               <XAxis dataKey="date" tickFormatter={(v) => { try { return format(new Date(v), "dd/MM") } catch { return v } }} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} />
               <YAxis tickFormatter={formatRevenue} tick={{ fontSize: 11 }} tickLine={false} axisLine={false} width={40} />
-              <Tooltip formatter={(v: any) => [`Rp ${Number(v).toLocaleString("id-ID")}`, "Revenue"]} />
+              <Tooltip formatter={(v: any, name: any) => [`Rp ${Number(v).toLocaleString("id-ID")}`, name === "totalRevenue" ? "Nilai Penjualan" : "Kas Masuk"]} />
+              <Legend formatter={(v) => v === "totalRevenue" ? "Nilai Penjualan" : "Kas Masuk"} iconSize={10} wrapperStyle={{ fontSize: 11 }} />
               <Bar dataKey="totalRevenue" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="cashCollected" fill="#16a34a" radius={[3, 3, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>

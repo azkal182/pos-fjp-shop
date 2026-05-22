@@ -24,12 +24,27 @@ export default function DashboardPage() {
         </Button>
       }
     >
-      {/* Row 1: Sales summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Row 1: Sales summary cards — 6 cards */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
         <SalesCard
           title="Penjualan Hari Ini"
           value={data?.salesSummary.todayRevenue ?? 0}
           isLoading={isLoading}
+          subtitle="Nilai penjualan (accrual)"
+        />
+        <SalesCard
+          title="Kas Masuk Hari Ini"
+          value={data?.salesSummary.todayCashCollected ?? 0}
+          isLoading={isLoading}
+          subtitle="Uang yang diterima"
+          variant="cash"
+        />
+        <SalesCard
+          title="Piutang Baru"
+          value={data?.salesSummary.todayNewDebt ?? 0}
+          isLoading={isLoading}
+          subtitle="Belum dibayar hari ini"
+          variant="debt"
         />
         <SalesCard
           title="Transaksi Hari Ini"

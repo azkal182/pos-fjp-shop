@@ -10,9 +10,14 @@ interface SalesCardProps {
   change?: number
   isCount?: boolean
   isLoading?: boolean
+  subtitle?: string
+  // variant: default = penjualan, cash = kas masuk (hijau), debt = piutang (oranye)
+  variant?: "default" | "cash" | "debt"
 }
 
-export function SalesCard({ title, value, period, change, isCount = false, isLoading }: SalesCardProps) {
+export function SalesCard({
+  title, value, period, change, isCount = false, isLoading, subtitle, variant = "default",
+}: SalesCardProps) {
   if (isLoading) {
     return (
       <Card>
@@ -29,17 +34,30 @@ export function SalesCard({ title, value, period, change, isCount = false, isLoa
   const isPositive = (change ?? 0) >= 0
   const isNeutral = change === 0
 
+  const valueColor =
+    variant === "cash" ? "text-green-600 dark:text-green-400" :
+    variant === "debt" ? "text-orange-600 dark:text-orange-400" :
+    ""
+
+  const borderColor =
+    variant === "cash" ? "border-green-200 dark:border-green-900/50" :
+    variant === "debt" ? "border-orange-200 dark:border-orange-900/50" :
+    ""
+
   return (
-    <Card>
+    <Card className={borderColor}>
       <CardContent className="p-5">
         <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
         <div className="mt-1.5">
           {isCount ? (
-            <p className="text-3xl font-bold">{value.toLocaleString("id-ID")}</p>
+            <p className={`text-3xl font-bold ${valueColor}`}>{value.toLocaleString("id-ID")}</p>
           ) : (
-            <CurrencyDisplay amount={value} className="text-2xl font-bold" />
+            <CurrencyDisplay amount={value} className={`text-2xl font-bold ${valueColor}`} />
           )}
         </div>
+        {subtitle && (
+          <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>
+        )}
         {hasChange && (
           <div className={`flex items-center gap-1 mt-1.5 text-xs font-medium ${
             isNeutral ? "text-muted-foreground" : isPositive ? "text-green-600" : "text-red-600"

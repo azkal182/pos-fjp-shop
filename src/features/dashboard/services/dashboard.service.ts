@@ -30,25 +30,25 @@ export async function getDashboardData(): Promise<DashboardData> {
     topProductsRaw,
     debtReport,
   ] = await Promise.all([
-    // Hari ini
+    // Hari ini — Accrual (semua transaksi CONFIRMED)
     prisma.transaction.aggregate({
-      where: { confirmationStatus: "CONFIRMED", paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: todayStart, lte: todayEnd } },
-      _sum: { totalAmount: true },
+      where: { confirmationStatus: "CONFIRMED", transactionDate: { gte: todayStart, lte: todayEnd } },
+      _sum: { totalAmount: true, paidAmount: true, debtAmount: true },
       _count: true,
     }),
-    // Minggu ini
+    // Minggu ini — Accrual
     prisma.transaction.aggregate({
-      where: { confirmationStatus: "CONFIRMED", paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: weekStart, lte: todayEnd } },
+      where: { confirmationStatus: "CONFIRMED", transactionDate: { gte: weekStart, lte: todayEnd } },
       _sum: { totalAmount: true },
     }),
-    // Bulan ini
+    // Bulan ini — Accrual
     prisma.transaction.aggregate({
-      where: { confirmationStatus: "CONFIRMED", paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: monthStart, lte: monthEnd } },
+      where: { confirmationStatus: "CONFIRMED", transactionDate: { gte: monthStart, lte: monthEnd } },
       _sum: { totalAmount: true },
     }),
-    // Bulan lalu
+    // Bulan lalu — Accrual
     prisma.transaction.aggregate({
-      where: { confirmationStatus: "CONFIRMED", paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: prevMonthStart, lte: prevMonthEnd } },
+      where: { confirmationStatus: "CONFIRMED", transactionDate: { gte: prevMonthStart, lte: prevMonthEnd } },
       _sum: { totalAmount: true },
     }),
     // Total piutang outstanding (customer)
@@ -73,19 +73,18 @@ export async function getDashboardData(): Promise<DashboardData> {
       where: { isActive: true },
       select: { id: true, name: true, stock: true, minStock: true },
     }).then((products) => products.filter((p) => p.stock <= p.minStock)),
-    // Grafik 30 hari
+    // Grafik 30 hari — Accrual
     prisma.transaction.findMany({
-      where: { confirmationStatus: "CONFIRMED", paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: thirtyDaysAgo, lte: todayEnd } },
-      select: { totalAmount: true, transactionDate: true },
+      where: { confirmationStatus: "CONFIRMED", transactionDate: { gte: thirtyDaysAgo, lte: todayEnd } },
+      select: { totalAmount: true, paidAmount: true, transactionDate: true },
       orderBy: { transactionDate: "asc" },
     }),
-    // Top 5 produk bulan ini
+    // Top 5 produk bulan ini — Accrual (semua transaksi CONFIRMED)
     prisma.transactionItem.groupBy({
       by: ["productId"],
       where: {
         transaction: {
           confirmationStatus: "CONFIRMED",
-          paymentStatus: { in: ["PAID", "PARTIAL"] },
           transactionDate: { gte: monthStart, lte: monthEnd },
         },
       },
@@ -105,13 +104,29 @@ export async function getDashboardData(): Promise<DashboardData> {
       ? ((monthRevenue - prevMonthRevenue) / prevMonthRevenue) * 100
       : monthRevenue > 0 ? 100 : 0
 
-  // Grafik: group by hari
-  const chartMap = new Map<string, number>()
+  // Kas masuk hari ini = paidAmount dari transaksi + pembayaran hutang langsung
+  const todayCashFromTrx = Number(todayAgg._sum.paidAmount ?? 0)
+  const todayDebtPayments = await prisma.customerPayment.aggregate({
+    where: {
+      paymentDate: { gte: todayStart, lte: todayEnd },
+      source: "DIRECT",
+    },
+    _sum: { amount: true },
+  })
+  const todayCashCollected = todayCashFromTrx + Number(todayDebtPayments._sum.amount ?? 0)
+  const todayNewDebt = Number(todayAgg._sum.debtAmount ?? 0)
+
+  // Grafik: group by hari — dual line (accrual + cash)
+  const chartMap = new Map<string, { revenue: number; cashCollected: number }>()
   for (const trx of chartData) {
     const key = format(trx.transactionDate, "yyyy-MM-dd")
-    chartMap.set(key, (chartMap.get(key) ?? 0) + Number(trx.totalAmount))
+    const existing = chartMap.get(key) ?? { revenue: 0, cashCollected: 0 }
+    chartMap.set(key, {
+      revenue: existing.revenue + Number(trx.totalAmount),
+      cashCollected: existing.cashCollected + Number(trx.paidAmount),
+    })
   }
-  const salesChart = Array.from(chartMap.entries()).map(([date, revenue]) => ({ date, revenue }))
+  const salesChart = Array.from(chartMap.entries()).map(([date, v]) => ({ date, ...v }))
 
   // Top products: fetch nama produk
   const productIds = topProductsRaw.map((p) => p.productId)
@@ -156,6 +171,8 @@ export async function getDashboardData(): Promise<DashboardData> {
       weekRevenue: Number(weekAgg._sum.totalAmount ?? 0),
       monthRevenue,
       monthRevenueChange,
+      todayCashCollected,
+      todayNewDebt,
     },
     totalOutstandingDebt: Number(debtAgg._sum.remainingAmount ?? 0),
     vendorDebtSummary: {

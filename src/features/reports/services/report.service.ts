@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { format, startOfDay, endOfDay, startOfWeek, startOfMonth, subDays } from "date-fns"
+import { format, startOfDay, endOfDay, startOfWeek, subDays } from "date-fns"
 import { getAgingCategories } from "@/features/debts/services/debt-aging.service"
 import { classifyDebtClient } from "@/features/debts/utils/aging.utils"
 import type { SalesReport, ProductReportItem, DebtReport, ProfitReport } from "../types/report.types"
@@ -9,6 +9,7 @@ function parseDate(d?: string): Date | undefined {
 }
 
 // ─── Sales Report ─────────────────────────────────────────────────────────────
+// Opsi C: Accrual (nilai penjualan) + Cash Basis (kas masuk)
 
 export async function getSalesReport(
   dateFrom?: string,
@@ -18,44 +19,83 @@ export async function getSalesReport(
   const from = parseDate(dateFrom) ?? subDays(new Date(), 29)
   const to = parseDate(dateTo) ?? new Date()
 
+  // 1. Semua transaksi CONFIRMED dalam periode (Accrual)
   const transactions = await prisma.transaction.findMany({
     where: {
       confirmationStatus: "CONFIRMED",
-      paymentStatus: { in: ["PAID", "PARTIAL"] },
       transactionDate: { gte: startOfDay(from), lte: endOfDay(to) },
     },
-    select: { totalAmount: true, transactionDate: true },
+    select: {
+      totalAmount: true,
+      paidAmount: true,
+      debtAmount: true,
+      paymentStatus: true,
+      transactionDate: true,
+    },
     orderBy: { transactionDate: "asc" },
   })
 
+  // 2. Pembayaran hutang yang diterima dalam periode (Cash Basis tambahan)
+  const debtPayments = await prisma.customerPayment.findMany({
+    where: {
+      paymentDate: { gte: startOfDay(from), lte: endOfDay(to) },
+      source: "DIRECT",  // hanya pembayaran manual, bukan dari POS overpay
+    },
+    select: { amount: true, paymentDate: true },
+  })
+
   // Group by period
-  const grouped = new Map<string, { revenue: number; count: number }>()
+  const grouped = new Map<string, {
+    revenue: number; count: number; cashCollected: number; newDebt: number
+  }>()
+
+  function getKey(date: Date): string {
+    if (groupBy === "month") return format(date, "yyyy-MM")
+    if (groupBy === "week") return format(startOfWeek(date, { weekStartsOn: 1 }), "yyyy-MM-dd")
+    return format(date, "yyyy-MM-dd")
+  }
+
   for (const trx of transactions) {
-    let key: string
-    if (groupBy === "month") {
-      key = format(trx.transactionDate, "yyyy-MM")
-    } else if (groupBy === "week") {
-      key = format(startOfWeek(trx.transactionDate, { weekStartsOn: 1 }), "yyyy-MM-dd")
-    } else {
-      key = format(trx.transactionDate, "yyyy-MM-dd")
-    }
-    const existing = grouped.get(key) ?? { revenue: 0, count: 0 }
+    const key = getKey(trx.transactionDate)
+    const existing = grouped.get(key) ?? { revenue: 0, count: 0, cashCollected: 0, newDebt: 0 }
     grouped.set(key, {
       revenue: existing.revenue + Number(trx.totalAmount),
       count: existing.count + 1,
+      // Kas masuk dari transaksi ini = paidAmount (uang tunai saat transaksi)
+      cashCollected: existing.cashCollected + Number(trx.paidAmount),
+      // Piutang baru = debtAmount
+      newDebt: existing.newDebt + Number(trx.debtAmount),
     })
   }
 
-  const data = Array.from(grouped.entries()).map(([date, v]) => ({
-    date,
-    totalRevenue: v.revenue,
-    transactionCount: v.count,
-  }))
+  // Tambahkan pembayaran hutang ke cashCollected per hari
+  for (const payment of debtPayments) {
+    const key = getKey(payment.paymentDate)
+    const existing = grouped.get(key) ?? { revenue: 0, count: 0, cashCollected: 0, newDebt: 0 }
+    grouped.set(key, {
+      ...existing,
+      cashCollected: existing.cashCollected + Number(payment.amount),
+    })
+  }
+
+  const data = Array.from(grouped.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, v]) => ({
+      date,
+      totalRevenue: v.revenue,
+      transactionCount: v.count,
+      cashCollected: v.cashCollected,
+      newDebt: v.newDebt,
+    }))
 
   const totalRevenue = transactions.reduce((s, t) => s + Number(t.totalAmount), 0)
   const totalTransactions = transactions.length
+  const totalCashFromTrx = transactions.reduce((s, t) => s + Number(t.paidAmount), 0)
+  const totalDebtPaymentsReceived = debtPayments.reduce((s, p) => s + Number(p.amount), 0)
+  const totalCashCollected = totalCashFromTrx + totalDebtPaymentsReceived
+  const totalNewDebt = transactions.reduce((s, t) => s + Number(t.debtAmount), 0)
 
-  // Periode sebelumnya untuk perbandingan
+  // Periode sebelumnya untuk perbandingan (accrual)
   const periodMs = to.getTime() - from.getTime()
   const prevFrom = new Date(from.getTime() - periodMs)
   const prevTo = new Date(from.getTime() - 1)
@@ -63,7 +103,6 @@ export async function getSalesReport(
   const prevTrx = await prisma.transaction.aggregate({
     where: {
       confirmationStatus: "CONFIRMED",
-      paymentStatus: { in: ["PAID", "PARTIAL"] },
       transactionDate: { gte: startOfDay(prevFrom), lte: endOfDay(prevTo) },
     },
     _sum: { totalAmount: true },
@@ -74,10 +113,20 @@ export async function getSalesReport(
       ? ((totalRevenue - comparisonRevenue) / comparisonRevenue) * 100
       : totalRevenue > 0 ? 100 : 0
 
-  return { data, totalRevenue, totalTransactions, comparisonRevenue, revenueChange }
+  return {
+    data,
+    totalRevenue,
+    totalTransactions,
+    comparisonRevenue,
+    revenueChange,
+    totalCashCollected,
+    totalNewDebt,
+    totalDebtPaymentsReceived,
+  }
 }
 
 // ─── Product Report ───────────────────────────────────────────────────────────
+// Accrual: semua transaksi CONFIRMED (termasuk hutang)
 
 export async function getProductReport(
   dateFrom?: string,
@@ -91,7 +140,6 @@ export async function getProductReport(
     where: {
       transaction: {
         confirmationStatus: "CONFIRMED",
-        paymentStatus: { in: ["PAID", "PARTIAL"] },
         transactionDate: { gte: startOfDay(from), lte: endOfDay(to) },
       },
       ...(categoryId && { product: { categoryId } }),
@@ -140,7 +188,6 @@ export async function getDebtReport(): Promise<DebtReport> {
   ])
 
   const bucketMap = new Map<string, { count: number; total: number; color: string }>()
-  // Init buckets
   for (const cat of categories) {
     bucketMap.set(cat.name, { count: 0, total: 0, color: cat.color })
   }
@@ -173,6 +220,7 @@ export async function getDebtReport(): Promise<DebtReport> {
 }
 
 // ─── Profit Report ────────────────────────────────────────────────────────────
+// Opsi C: Accrual profit + Cash profit
 
 export async function getProfitReport(
   dateFrom?: string,
@@ -181,84 +229,154 @@ export async function getProfitReport(
   const from = parseDate(dateFrom) ?? subDays(new Date(), 29)
   const to = parseDate(dateTo) ?? new Date()
 
-  const items = await prisma.transactionItem.findMany({
+  // Semua transaksi CONFIRMED (Accrual)
+  const transactions = await prisma.transaction.findMany({
     where: {
-      transaction: {
-        confirmationStatus: "CONFIRMED",
-        paymentStatus: { in: ["PAID", "PARTIAL"] },
-        transactionDate: { gte: startOfDay(from), lte: endOfDay(to) },
-      },
+      confirmationStatus: "CONFIRMED",
+      transactionDate: { gte: startOfDay(from), lte: endOfDay(to) },
     },
-    include: {
-      transaction: { select: { transactionDate: true, packingFee: true } },
+    select: {
+      id: true,
+      transactionDate: true,
+      paidAmount: true,
+      debtAmount: true,
+      packingFee: true,
     },
   })
 
-  const byDay = new Map<string, { revenue: number; hpp: number; profit: number }>()
+  const transactionIds = transactions.map((t) => t.id)
+  const trxMap = new Map(transactions.map((t) => [t.id, t]))
+
+  // Items dari semua transaksi tersebut
+  const items = await prisma.transactionItem.findMany({
+    where: { transactionId: { in: transactionIds } },
+    select: {
+      transactionId: true,
+      quantity: true,
+      sellPrice: true,
+      buyPrice: true,
+      discountAmount: true,
+    },
+  })
+
+  // Pembayaran hutang yang diterima dalam periode
+  const debtPayments = await prisma.customerPayment.findMany({
+    where: {
+      paymentDate: { gte: startOfDay(from), lte: endOfDay(to) },
+      source: "DIRECT",
+    },
+    select: { amount: true, paymentDate: true },
+  })
+
+  const byDay = new Map<string, {
+    revenue: number; cashRevenue: number; hpp: number; profit: number; cashProfit: number
+  }>()
+
   let totalRevenue = 0
   let totalHPP = 0
+  let totalNewDebt = 0
 
+  // Hitung per item
   for (const item of items) {
-    const date = format(item.transaction.transactionDate, "yyyy-MM-dd")
+    const trx = trxMap.get(item.transactionId)
+    if (!trx) continue
+
+    const date = format(trx.transactionDate, "yyyy-MM-dd")
     const qty = item.quantity
     const revenue = Number(item.sellPrice) * qty - Number(item.discountAmount) * qty
     const hpp = Number(item.buyPrice) * qty
-    const profit = revenue - hpp
 
     totalRevenue += revenue
     totalHPP += hpp
 
-    const existing = byDay.get(date) ?? { revenue: 0, hpp: 0, profit: 0 }
+    const existing = byDay.get(date) ?? { revenue: 0, cashRevenue: 0, hpp: 0, profit: 0, cashProfit: 0 }
     byDay.set(date, {
+      ...existing,
       revenue: existing.revenue + revenue,
       hpp: existing.hpp + hpp,
-      profit: existing.profit + profit,
+      profit: existing.profit + (revenue - hpp),
     })
   }
 
-  // Tambahkan packingFee ke revenue (packing fee = revenue murni, HPP = 0)
-  // Group packingFee by day dari transaksi yang sama
-  const packingByDay = new Map<string, number>()
-  let totalPackingFee = 0
+  // Hitung packing fee per transaksi unik (accrual)
+  const processedTrx = new Set<string>()
   for (const item of items) {
-    const date = format(item.transaction.transactionDate, "yyyy-MM-dd")
-    const packing = Number(item.transaction.packingFee ?? 0)
-    if (packing > 0) {
-      // Hanya hitung sekali per transaksi (bukan per item)
-      // Gunakan Set untuk track transactionId yang sudah dihitung
-    }
-    packingByDay.set(date, (packingByDay.get(date) ?? 0))
-  }
+    if (processedTrx.has(item.transactionId)) continue
+    processedTrx.add(item.transactionId)
 
-  // Hitung packingFee per transaksi unik
-  const uniqueTrxPacking = new Map<string, { date: string; packing: number }>()
-  for (const item of items) {
-    if (!uniqueTrxPacking.has(item.transactionId)) {
-      uniqueTrxPacking.set(item.transactionId, {
-        date: format(item.transaction.transactionDate, "yyyy-MM-dd"),
-        packing: Number(item.transaction.packingFee ?? 0),
-      })
-    }
-  }
-  for (const { date, packing } of uniqueTrxPacking.values()) {
+    const trx = trxMap.get(item.transactionId)
+    if (!trx) continue
+
+    const packing = Number(trx.packingFee ?? 0)
+    const date = format(trx.transactionDate, "yyyy-MM-dd")
+    totalNewDebt += Number(trx.debtAmount)
+
     if (packing > 0) {
       totalRevenue += packing
-      totalPackingFee += packing
-      const existing = byDay.get(date) ?? { revenue: 0, hpp: 0, profit: 0 }
+      const existing = byDay.get(date) ?? { revenue: 0, cashRevenue: 0, hpp: 0, profit: 0, cashProfit: 0 }
       byDay.set(date, {
+        ...existing,
         revenue: existing.revenue + packing,
-        hpp: existing.hpp,
-        profit: existing.profit + packing,  // packing fee = pure profit
+        profit: existing.profit + packing,
       })
     }
+
+    // Cash revenue per transaksi = paidAmount + packing (jika lunas)
+    const cashFromTrx = Number(trx.paidAmount)
+    if (cashFromTrx > 0) {
+      const existing = byDay.get(date) ?? { revenue: 0, cashRevenue: 0, hpp: 0, profit: 0, cashProfit: 0 }
+      byDay.set(date, {
+        ...existing,
+        cashRevenue: existing.cashRevenue + cashFromTrx,
+      })
+    }
+  }
+
+  // Tambahkan pembayaran hutang ke cashRevenue per hari
+  let totalDebtPaymentsReceived = 0
+  for (const payment of debtPayments) {
+    const date = format(payment.paymentDate, "yyyy-MM-dd")
+    const amount = Number(payment.amount)
+    totalDebtPaymentsReceived += amount
+    const existing = byDay.get(date) ?? { revenue: 0, cashRevenue: 0, hpp: 0, profit: 0, cashProfit: 0 }
+    byDay.set(date, {
+      ...existing,
+      cashRevenue: existing.cashRevenue + amount,
+    })
+  }
+
+  // Hitung cashProfit = cashRevenue - (hpp * cashRevenue/revenue) — proporsional
+  // Lebih sederhana: cashProfit = cashRevenue - totalHPP * (cashRevenue/totalRevenue)
+  const totalCashRevenue = Array.from(byDay.values()).reduce((s, v) => s + v.cashRevenue, 0)
+
+  // Update cashProfit per hari
+  for (const [date, v] of byDay.entries()) {
+    const cashProfitRatio = totalRevenue > 0 ? v.cashRevenue / totalRevenue : 0
+    byDay.set(date, {
+      ...v,
+      cashProfit: v.cashRevenue - (totalHPP * cashProfitRatio),
+    })
   }
 
   const totalProfit = totalRevenue - totalHPP
   const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0
+  const totalCashProfit = totalCashRevenue - totalHPP * (totalRevenue > 0 ? totalCashRevenue / totalRevenue : 0)
+  const cashProfitMargin = totalCashRevenue > 0 ? (totalCashProfit / totalCashRevenue) * 100 : 0
 
   const data = Array.from(byDay.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([date, v]) => ({ date, ...v }))
 
-  return { totalRevenue, totalHPP, totalProfit, profitMargin, data }
+  return {
+    totalRevenue,
+    totalHPP,
+    totalProfit,
+    profitMargin,
+    totalCashRevenue,
+    totalCashProfit,
+    cashProfitMargin,
+    totalNewDebt,
+    totalDebtPaymentsReceived,
+    data,
+  }
 }
