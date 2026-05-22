@@ -70,7 +70,9 @@ async function main() {
         { key: "store_address", value: "Jl. Raya Utama No. 12, Jakarta Selatan", group: "STORE" as const, label: "Alamat Toko" },
         { key: "store_phone", value: "0812-3456-7890", group: "STORE" as const, label: "No. HP Toko" },
         { key: "store_receipt_note", value: "Terima kasih telah berbelanja di FJP Shop!\nBarang yang sudah dibeli tidak dapat dikembalikan.", group: "STORE" as const, label: "Catatan Struk" },
+        { key: "store_logo_url", value: "", group: "STORE" as const, label: "URL Logo Nota" },
         { key: "pos_payment_methods", value: "CASH,TRANSFER", group: "POS" as const, label: "Metode Bayar" },
+        { key: "printer_receipt_width", value: "80mm", group: "PRINTER" as const, label: "Lebar Kertas Thermal" },
     ]
     for (const s of settings) {
         await prisma.setting.upsert({ where: { key: s.key }, update: { value: s.value }, create: s })
