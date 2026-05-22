@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma"
 import { NotFoundError, ValidationError } from "@/lib/exceptions"
 import { log } from "@/lib/logger"
-import { generateCode } from "@/lib/utils"
+import { generateCode, generateSequentialCode } from "@/lib/utils"
 import { calculatePagination } from "@/lib/api-response"
 import { createMovement } from "@/features/stock-movements/services/stock-movement.service"
 import { updateAfterPurchase } from "@/features/products/services/product-vendor-price.service"
@@ -101,7 +101,7 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
     if (!product.isActive) throw new ValidationError(`Produk "${product.name}" tidak aktif`)
   }
 
-  const code = generateCode("PO")
+  const code = await generateSequentialCode("PO")
   const totalAmount = data.items.reduce(
     (sum, item) => sum + item.quantity * item.buyPrice,
     0

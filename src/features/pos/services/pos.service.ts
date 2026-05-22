@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma"
 import { log } from "@/lib/logger"
-import { generateCode } from "@/lib/utils"
+import { generateCode, generateSequentialCode } from "@/lib/utils"
 import { ValidationError, NotFoundError, ConflictError } from "@/lib/exceptions"
 import { createMovement } from "@/features/stock-movements/services/stock-movement.service"
 import { hasOutstandingDebt, allocatePaymentFifo } from "@/features/debts/services/debt.service"
@@ -31,7 +31,7 @@ export async function createDraft(payload: CreateDraftInput, userId: string) {
     }
   }
 
-  const code = generateCode("TRX")
+  const code = await generateSequentialCode("TRX")
   const subtotal = items.reduce(
     (sum, item) => sum + (item.sellPrice - item.discountAmount) * item.quantity,
     0
