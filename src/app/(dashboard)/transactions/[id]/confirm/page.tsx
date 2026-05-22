@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react"
 import { useParams, useRouter } from "next/navigation"
 import {
   ArrowLeft, Loader2, CreditCard, Package, Wallet,
-  AlertCircle, CheckCircle2, X, Banknote, Trash2,
+  AlertCircle, CheckCircle2, X, Banknote, Trash2, Pencil, Plus, Search,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -22,9 +22,21 @@ interface EditableItem {
   id: string
   productId: string
   productName: string
+  productCode?: string
+  unit?: string
   quantity: number
   sellPrice: number
   discountAmount: number
+}
+
+interface ProductResult {
+  id: string
+  code: string
+  name: string
+  unit: string
+  sellPrice: number
+  stock: number
+  reservedStock: number
 }
 
 interface Transaction {
@@ -63,6 +75,108 @@ function formatShort(amount: number): string {
   return amount.toLocaleString("id-ID")
 }
 
+// ── ProductSearch mini untuk tambah produk ────────────────────────────────────
+
+function AddProductSearch({ onAdd }: { onAdd: (p: ProductResult) => void }) {
+  const [search, setSearch] = useState("")
+  const [results, setResults] = useState<ProductResult[]>([])
+  const [showDropdown, setShowDropdown] = useState(false)
+  const [activeIndex, setActiveIndex] = useState(-1)
+  const listRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!search.trim()) { setResults([]); return }
+    const t = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/products?search=${encodeURIComponent(search)}&isActive=true&limit=8`)
+        const json = await res.json()
+        setResults(json.data ?? [])
+        setActiveIndex(-1)
+      } catch { setResults([]) }
+    }, 250)
+    return () => clearTimeout(t)
+  }, [search])
+
+  useEffect(() => {
+    if (activeIndex >= 0 && listRef.current) {
+      const el = listRef.current.children[activeIndex] as HTMLElement
+      el?.scrollIntoView({ block: "nearest" })
+    }
+  }, [activeIndex])
+
+  function select(p: ProductResult) {
+    onAdd(p)
+    setSearch("")
+    setResults([])
+    setShowDropdown(false)
+    setTimeout(() => inputRef.current?.focus(), 50)
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!showDropdown || results.length === 0) return
+    if (e.key === "ArrowDown") { e.preventDefault(); setActiveIndex((i) => Math.min(i + 1, results.length - 1)) }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActiveIndex((i) => Math.max(i - 1, 0)) }
+    else if (e.key === "Enter") { e.preventDefault(); if (activeIndex >= 0) select(results[activeIndex]) }
+    else if (e.key === "Escape") { setShowDropdown(false); setActiveIndex(-1) }
+  }
+
+  return (
+    <div className="relative">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+        <Input
+          ref={inputRef}
+          value={search}
+          autoComplete="off"
+          placeholder="Cari produk untuk ditambahkan..."
+          className="pl-8 h-9 text-sm"
+          onChange={(e) => { setSearch(e.target.value); setShowDropdown(true) }}
+          onFocus={() => search && setShowDropdown(true)}
+          onBlur={() => setTimeout(() => setShowDropdown(false), 150)}
+          onKeyDown={handleKeyDown}
+          autoFocus
+        />
+      </div>
+      {showDropdown && results.length > 0 && (
+        <div
+          ref={listRef}
+          className="absolute z-[200] top-full left-0 right-0 mt-1 bg-background border rounded-lg shadow-xl max-h-52 overflow-y-auto"
+        >
+          {results.map((p, i) => {
+            const available = p.stock - (p.reservedStock ?? 0)
+            const outOfStock = available <= 0
+            return (
+              <button
+                key={p.id} type="button"
+                disabled={outOfStock}
+                className={`w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors disabled:opacity-50 ${
+                  i === activeIndex ? "bg-accent text-accent-foreground" : "hover:bg-muted"
+                }`}
+                onMouseDown={(e) => { e.preventDefault(); if (!outOfStock) select(p) }}
+                onMouseEnter={() => !outOfStock && setActiveIndex(i)}
+              >
+                <div className="flex-1 min-w-0">
+                  <span className="font-medium truncate block">{p.name}</span>
+                  <span className="text-xs text-muted-foreground font-mono">{p.code} · {p.unit}</span>
+                </div>
+                <div className="text-right shrink-0">
+                  <CurrencyDisplay amount={p.sellPrice} className="text-xs font-semibold" />
+                  <p className={`text-[10px] ${outOfStock ? "text-red-500" : "text-muted-foreground"}`}>
+                    {outOfStock ? "Habis" : `Stok: ${available}`}
+                  </p>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Main Page ─────────────────────────────────────────────────────────────────
+
 export default function ConfirmTransactionPage() {
   const params = useParams()
   const router = useRouter()
@@ -74,7 +188,8 @@ export default function ConfirmTransactionPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isCancelOpen, setIsCancelOpen] = useState(false)
 
-  // Editable items state — diinisialisasi dari transaksi
+  // Edit mode state
+  const [isEditMode, setIsEditMode] = useState(false)
   const [editItems, setEditItems] = useState<EditableItem[]>([])
   const [discount, setDiscount] = useState(0)
 
@@ -115,7 +230,7 @@ export default function ConfirmTransactionPage() {
 
   if (isLoading || !transaction) return <LoadingSpinner centered />
 
-  // Kalkulasi real-time dari editItems
+  // Kalkulasi real-time
   const subtotal = editItems.reduce(
     (s, i) => s + (i.sellPrice - i.discountAmount) * i.quantity, 0
   )
@@ -129,27 +244,42 @@ export default function ConfirmTransactionPage() {
   const overpayAmount = Math.max(0, effectivePaid - totalAmount)
   const isFullPay = effectivePaid >= totalAmount && overpayAmount === 0
   const isWalkIn = !transaction.customerId
-  // Hutang semua = nominal kosong + ada customer
   const isAllDebt = paidAmount === "" && !isWalkIn
-
   const suggests = generateSuggests(totalAmount)
 
-  // Tombol konfirmasi bisa diklik jika:
-  // - Ada customer + nominal kosong (hutang semua) ATAU
-  // - Nominal > 0 (bayar sebagian/lunas)
-  // - Walk-in harus bayar lunas
   const canConfirm = !isSubmitting && editItems.length > 0 && (
     isAllDebt || (paid > 0 && !(isWalkIn && debtAmount > 0))
   )
 
-  function updateItem(idx: number, field: keyof EditableItem, value: number) {
+  function updateQty(idx: number, qty: number) {
     setEditItems((prev) => prev.map((item, i) =>
-      i === idx ? { ...item, [field]: value } : item
+      i === idx ? { ...item, quantity: Math.max(1, qty) } : item
     ))
   }
 
   function removeItem(idx: number) {
     setEditItems((prev) => prev.filter((_, i) => i !== idx))
+  }
+
+  function addProduct(p: ProductResult) {
+    // Jika produk sudah ada, tambah qty
+    const existing = editItems.findIndex((i) => i.productId === p.id)
+    if (existing >= 0) {
+      setEditItems((prev) => prev.map((item, i) =>
+        i === existing ? { ...item, quantity: item.quantity + 1 } : item
+      ))
+    } else {
+      setEditItems((prev) => [...prev, {
+        id: `new-${p.id}`,
+        productId: p.id,
+        productName: p.name,
+        productCode: p.code,
+        unit: p.unit,
+        quantity: 1,
+        sellPrice: p.sellPrice,
+        discountAmount: 0,
+      }])
+    }
   }
 
   async function handleConfirm() {
@@ -170,7 +300,6 @@ export default function ConfirmTransactionPage() {
           overpayAction,
           depositUsed,
           depositId: useDepositChecked && firstDeposit ? firstDeposit.id : undefined,
-          // Kirim items yang sudah diedit
           items: editItems.map((i) => ({
             productId: i.productId,
             quantity: i.quantity,
@@ -225,7 +354,7 @@ export default function ConfirmTransactionPage() {
       }
     >
       <div className="grid grid-cols-1 lg:grid-cols-[1fr_360px] gap-6 items-start">
-        {/* ── Kiri: Item order (editable) ── */}
+        {/* ── Kiri: Item order ── */}
         <div className="space-y-4">
           {/* Info order */}
           <div className="rounded-xl border bg-card p-4">
@@ -243,37 +372,52 @@ export default function ConfirmTransactionPage() {
             </div>
           </div>
 
-          {/* Tabel item — editable */}
-          <div className="rounded-xl border bg-card overflow-hidden">
-            <div className="px-4 py-3 border-b bg-muted/30 flex items-center gap-2">
-              <Package className="h-4 w-4 text-muted-foreground" />
-              <span className="text-sm font-semibold">Item Order</span>
-              <span className="text-xs text-muted-foreground ml-auto">Qty dan harga bisa diubah</span>
+          {/* Tabel item */}
+          <div className="rounded-xl border bg-card overflow-visible">
+            <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between rounded-t-xl">
+              <div className="flex items-center gap-2">
+                <Package className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm font-semibold">Item Order</span>
+              </div>
+              <Button
+                variant={isEditMode ? "default" : "outline"}
+                size="sm"
+                className="h-7 text-xs gap-1.5"
+                onClick={() => setIsEditMode(!isEditMode)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                {isEditMode ? "Selesai Edit" : "Edit Item"}
+              </Button>
             </div>
 
             {/* Header kolom */}
-            <div className="hidden sm:grid grid-cols-[1fr_80px_120px_90px_32px] gap-2 px-4 py-2 bg-muted/20 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b">
+            <div className={`hidden sm:grid gap-2 px-4 py-2 bg-muted/20 text-xs font-semibold text-muted-foreground uppercase tracking-wide border-b ${
+              isEditMode ? "grid-cols-[1fr_80px_90px_32px]" : "grid-cols-[1fr_60px_100px_90px]"
+            }`}>
               <span>Produk</span>
               <span className="text-center">Qty</span>
-              <span>Harga Jual</span>
-              <span className="text-right">Subtotal</span>
-              <span />
+              <span className="text-right">{isEditMode ? "Subtotal" : "Harga"}</span>
+              {isEditMode ? <span /> : <span className="text-right">Subtotal</span>}
             </div>
 
             <div className="divide-y">
               {editItems.length === 0 ? (
-                <div className="px-4 py-10 text-center">
-                  <p className="text-sm text-muted-foreground">Semua item dihapus</p>
-                  <p className="text-xs text-muted-foreground/70 mt-1">Tambahkan item atau batalkan order</p>
+                <div className="px-4 py-8 text-center">
+                  <p className="text-sm text-muted-foreground">Tidak ada item</p>
                 </div>
               ) : (
                 editItems.map((item, idx) => {
                   const itemSubtotal = (item.sellPrice - item.discountAmount) * item.quantity
                   return (
-                    <div key={item.id} className="grid grid-cols-[1fr_80px_120px_90px_32px] gap-2 px-4 py-2.5 items-center">
+                    <div
+                      key={item.id}
+                      className={`grid gap-2 px-4 py-2.5 items-center text-sm ${
+                        isEditMode ? "grid-cols-[1fr_80px_90px_32px]" : "grid-cols-[1fr_60px_100px_90px]"
+                      }`}
+                    >
                       {/* Nama produk */}
                       <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{item.productName}</p>
+                        <p className="font-medium truncate">{item.productName}</p>
                         {item.discountAmount > 0 && (
                           <p className="text-xs text-muted-foreground">
                             Disc: <CurrencyDisplay amount={item.discountAmount} className="text-xs" />
@@ -281,77 +425,86 @@ export default function ConfirmTransactionPage() {
                         )}
                       </div>
 
-                      {/* Qty editable */}
-                      <Input
-                        type="number"
-                        min={1}
-                        value={item.quantity}
-                        onChange={(e) => updateItem(idx, "quantity", Math.max(1, parseInt(e.target.value) || 1))}
-                        onFocus={(e) => e.target.select()}
-                        className="h-8 text-sm text-center px-1"
-                      />
-
-                      {/* Harga jual editable */}
-                      <div className="relative">
-                        <span className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-muted-foreground pointer-events-none">Rp</span>
+                      {/* Qty — editable saat edit mode */}
+                      {isEditMode ? (
                         <Input
                           type="number"
-                          min={0}
-                          value={item.sellPrice}
-                          onChange={(e) => updateItem(idx, "sellPrice", parseFloat(e.target.value) || 0)}
+                          min={1}
+                          value={item.quantity}
+                          onChange={(e) => updateQty(idx, parseInt(e.target.value) || 1)}
                           onFocus={(e) => e.target.select()}
-                          className="h-8 text-sm pl-6"
+                          className="h-8 text-sm text-center px-1"
                         />
-                      </div>
+                      ) : (
+                        <p className="text-center text-muted-foreground">{item.quantity}</p>
+                      )}
 
-                      {/* Subtotal */}
-                      <CurrencyDisplay amount={itemSubtotal} className="text-right text-sm font-semibold" />
+                      {/* Harga / Subtotal */}
+                      {isEditMode ? (
+                        <CurrencyDisplay amount={itemSubtotal} className="text-right text-sm font-semibold" />
+                      ) : (
+                        <CurrencyDisplay amount={item.sellPrice} className="text-right text-sm" />
+                      )}
 
-                      {/* Hapus */}
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 text-muted-foreground hover:text-destructive"
-                        onClick={() => removeItem(idx)}
-                        disabled={editItems.length <= 1}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
+                      {/* Subtotal (read mode) / Hapus (edit mode) */}
+                      {isEditMode ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                          onClick={() => removeItem(idx)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      ) : (
+                        <CurrencyDisplay amount={itemSubtotal} className="text-right text-sm font-semibold" />
+                      )}
                     </div>
                   )
                 })
               )}
             </div>
 
-            {/* Footer subtotal */}
-            {editItems.length > 0 && (
-              <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/20">
-                <span className="text-sm text-muted-foreground">{editItems.length} produk</span>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">Subtotal:</span>
-                  <CurrencyDisplay amount={subtotal} className="text-base font-bold" />
-                </div>
+            {/* Tambah produk — hanya saat edit mode */}
+            {isEditMode && (
+              <div className="px-4 py-3 border-t bg-muted/10 space-y-2 overflow-visible">
+                <p className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+                  <Plus className="h-3.5 w-3.5" />
+                  Tambah Produk
+                </p>
+                <AddProductSearch onAdd={addProduct} />
               </div>
             )}
-          </div>
 
-          {/* Diskon order */}
-          <div className="rounded-xl border bg-card p-4 space-y-2">
-            <Label className="text-xs">Diskon Order <span className="text-muted-foreground">(opsional)</span></Label>
-            <div className="relative">
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
-              <Input
-                type="number"
-                min={0}
-                placeholder="0"
-                value={discount || ""}
-                onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
-                onFocus={(e) => e.target.select()}
-                className="pl-9 h-9"
-              />
+            {/* Footer subtotal */}
+            <div className="flex items-center justify-between px-4 py-3 border-t bg-muted/20">
+              <span className="text-sm text-muted-foreground">{editItems.length} produk</span>
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">Subtotal:</span>
+                <CurrencyDisplay amount={subtotal} className="text-base font-bold" />
+              </div>
             </div>
           </div>
+
+          {/* Diskon order — hanya tampil saat edit mode */}
+          {isEditMode && (
+            <div className="rounded-xl border bg-card p-4 space-y-2">
+              <Label className="text-xs">Diskon Order <span className="text-muted-foreground">(opsional)</span></Label>
+              <div className="relative">
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
+                <Input
+                  type="number"
+                  min={0}
+                  placeholder="0"
+                  value={discount || ""}
+                  onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                  onFocus={(e) => e.target.select()}
+                  className="pl-9 h-9"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* ── Kanan: Panel pembayaran ── */}
@@ -448,9 +601,7 @@ export default function ConfirmTransactionPage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label className="text-xs">Nominal Bayar</Label>
-                {!isWalkIn && (
-                  <span className="text-xs text-muted-foreground">Kosong = hutang semua</span>
-                )}
+                {!isWalkIn && <span className="text-xs text-muted-foreground">Kosong = hutang semua</span>}
               </div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
@@ -466,8 +617,6 @@ export default function ConfirmTransactionPage() {
                   autoFocus
                 />
               </div>
-
-              {/* Quick fill */}
               <div className="flex flex-wrap gap-1.5">
                 {!isWalkIn && (
                   <button
@@ -579,7 +728,6 @@ export default function ConfirmTransactionPage() {
               </div>
             )}
 
-            {/* Tombol konfirmasi */}
             <Button
               className="w-full h-11 gap-2 text-base font-semibold"
               disabled={!canConfirm}
