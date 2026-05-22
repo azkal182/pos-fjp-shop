@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useCallback } from "react"
 import Link from "next/link"
 import { Banknote, BookOpen } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -17,6 +17,7 @@ import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { StatusBadge } from "@/components/shared/StatusBadge"
 import { SearchInput } from "@/components/shared/SearchInput"
 import { Pagination } from "@/components/shared/Pagination"
+import { Skeleton } from "@/components/ui/skeleton"
 import { DebtAgingBadge } from "./DebtAgingBadge"
 import { DebtPaymentForm } from "./DebtPaymentForm"
 import { format } from "date-fns"
@@ -57,23 +58,32 @@ export function DebtTable({
 }: DebtTableProps) {
   const [payTarget, setPayTarget] = useState<{ id: string; name: string } | null>(null)
 
-  // Di global view: group by customer untuk tombol Bayar per customer
-  const customerMap = new Map<string, { id: string; name: string; phone: string | null; totalRemaining: number }>()
-  if (isGlobal) {
-    for (const row of data) {
-      const existing = customerMap.get(row.customerId)
-      if (existing) {
-        existing.totalRemaining += row.remainingAmount
-      } else {
-        customerMap.set(row.customerId, {
-          id: row.customerId,
-          name: row.customer.name,
-          phone: row.customer.phone,
-          totalRemaining: row.remainingAmount,
-        })
-      }
+  // State untuk tab Ringkasan per Customer (hanya di global view)
+  const [summaryData, setSummaryData] = useState<{
+    customerId: string; name: string; phone: string | null; totalRemaining: number; debtCount: number
+  }[]>([])
+  const [summaryMeta, setSummaryMeta] = useState<PaginationMeta>({ page: 1, limit: 20, total: 0, totalPages: 0 })
+  const [summaryPage, setSummaryPage] = useState(1)
+  const [summarySearch, setSummarySearch] = useState("")
+  const [isSummaryLoading, setIsSummaryLoading] = useState(false)
+
+  const fetchSummary = useCallback(async () => {
+    if (!isGlobal) return
+    setIsSummaryLoading(true)
+    try {
+      const p = new URLSearchParams()
+      p.set("page", String(summaryPage))
+      if (summarySearch) p.set("search", summarySearch)
+      const res = await fetch(`/api/debts/summary?${p}`)
+      const json = await res.json()
+      setSummaryData(json.data ?? [])
+      setSummaryMeta(json.meta)
+    } catch {} finally {
+      setIsSummaryLoading(false)
     }
-  }
+  }, [isGlobal, summaryPage, summarySearch])
+
+  useEffect(() => { fetchSummary() }, [fetchSummary])
 
   const columns: Column<DebtRow>[] = [
     ...(isGlobal ? [{
@@ -188,42 +198,56 @@ export function DebtTable({
 
           {/* Tab 1: Ringkasan per Customer */}
           <TabsContent value="summary" className="mt-4">
-            {customerMap.size === 0 ? (
-              <div className="rounded-lg border bg-card p-8 text-center">
-                <p className="text-sm text-muted-foreground">Tidak ada hutang aktif</p>
-              </div>
-            ) : (
-              <div className="rounded-lg border overflow-hidden">
-                <div className="divide-y">
-                  {Array.from(customerMap.values()).map((c) => (
-                    <div key={c.id} className="flex items-center justify-between px-4 py-3 gap-3">
-                      <div className="min-w-0">
-                        <Link href={`/debts/${c.id}`} className="font-medium text-sm hover:underline flex items-center gap-1.5">
-                          {c.name}
-                          <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
-                        </Link>
-                        {c.phone && <p className="text-xs text-muted-foreground">{c.phone}</p>}
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <div className="text-right">
-                          <p className="text-xs text-muted-foreground">Total Hutang</p>
-                          <CurrencyDisplay amount={c.totalRemaining} className="text-sm font-bold text-red-600" />
-                        </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="gap-1.5 h-8"
-                          onClick={() => setPayTarget({ id: c.id, name: c.name })}
-                        >
-                          <Banknote className="h-3.5 w-3.5" />
-                          Bayar Hutang
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+            <div className="space-y-4">
+              <SearchInput
+                value={summarySearch}
+                onChange={(v) => { setSummarySearch(v); setSummaryPage(1) }}
+                placeholder="Cari nama customer..."
+                className="w-56"
+              />
+              {isSummaryLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => <Skeleton key={i} className="h-14 w-full" />)}
                 </div>
-              </div>
-            )}
+              ) : summaryData.length === 0 ? (
+                <div className="rounded-lg border bg-card p-8 text-center">
+                  <p className="text-sm text-muted-foreground">Tidak ada hutang aktif</p>
+                </div>
+              ) : (
+                <div className="rounded-lg border overflow-hidden">
+                  <div className="divide-y">
+                    {summaryData.map((c) => (
+                      <div key={c.customerId} className="flex items-center justify-between px-4 py-3 gap-3">
+                        <div className="min-w-0">
+                          <Link href={`/debts/${c.customerId}`} className="font-medium text-sm hover:underline flex items-center gap-1.5">
+                            {c.name}
+                            <BookOpen className="h-3.5 w-3.5 text-muted-foreground" />
+                          </Link>
+                          {c.phone && <p className="text-xs text-muted-foreground">{c.phone}</p>}
+                          <p className="text-xs text-muted-foreground">{c.debtCount} transaksi belum lunas</p>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <div className="text-right">
+                            <p className="text-xs text-muted-foreground">Total Hutang</p>
+                            <CurrencyDisplay amount={c.totalRemaining} className="text-sm font-bold text-red-600" />
+                          </div>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="gap-1.5 h-8"
+                            onClick={() => setPayTarget({ id: c.customerId, name: c.name })}
+                          >
+                            <Banknote className="h-3.5 w-3.5" />
+                            Bayar Hutang
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <Pagination meta={summaryMeta} onPageChange={setSummaryPage} />
+            </div>
           </TabsContent>
 
           {/* Tab 2: Semua Hutang per transaksi */}
@@ -296,6 +320,7 @@ export function DebtTable({
           onSuccess={() => {
             setPayTarget(null)
             onRefetch()
+            fetchSummary()
           }}
         />
       )}
