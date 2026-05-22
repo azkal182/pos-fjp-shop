@@ -5,6 +5,7 @@ import { calculatePagination } from "@/lib/api-response"
 export interface TransactionFilter {
   customerId?: string
   paymentStatus?: string
+  confirmationStatus?: string
   dateFrom?: string
   dateTo?: string
   page?: number
@@ -12,11 +13,16 @@ export interface TransactionFilter {
 }
 
 export async function getAllTransactions(filter: TransactionFilter = {}) {
-  const { customerId, paymentStatus, dateFrom, dateTo, page = 1, limit = 20 } = filter
+  const { customerId, paymentStatus, confirmationStatus, dateFrom, dateTo, page = 1, limit = 20 } = filter
 
   const where = {
     ...(customerId && { customerId }),
     ...(paymentStatus && { paymentStatus: paymentStatus as any }),
+    // Default: tampilkan semua kecuali CANCELLED jika tidak ada filter status
+    ...(confirmationStatus
+      ? { confirmationStatus: confirmationStatus as any }
+      : { confirmationStatus: { in: ["DRAFT", "CONFIRMED"] as any[] } }
+    ),
     ...((dateFrom || dateTo) && {
       transactionDate: {
         ...(dateFrom && { gte: new Date(dateFrom) }),

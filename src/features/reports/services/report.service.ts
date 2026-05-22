@@ -20,6 +20,7 @@ export async function getSalesReport(
 
   const transactions = await prisma.transaction.findMany({
     where: {
+      confirmationStatus: "CONFIRMED",
       paymentStatus: { in: ["PAID", "PARTIAL"] },
       transactionDate: { gte: startOfDay(from), lte: endOfDay(to) },
     },
@@ -61,6 +62,7 @@ export async function getSalesReport(
 
   const prevTrx = await prisma.transaction.aggregate({
     where: {
+      confirmationStatus: "CONFIRMED",
       paymentStatus: { in: ["PAID", "PARTIAL"] },
       transactionDate: { gte: startOfDay(prevFrom), lte: endOfDay(prevTo) },
     },
@@ -88,6 +90,7 @@ export async function getProductReport(
   const items = await prisma.transactionItem.findMany({
     where: {
       transaction: {
+        confirmationStatus: "CONFIRMED",
         paymentStatus: { in: ["PAID", "PARTIAL"] },
         transactionDate: { gte: startOfDay(from), lte: endOfDay(to) },
       },
@@ -181,12 +184,13 @@ export async function getProfitReport(
   const items = await prisma.transactionItem.findMany({
     where: {
       transaction: {
+        confirmationStatus: "CONFIRMED",
         paymentStatus: { in: ["PAID", "PARTIAL"] },
         transactionDate: { gte: startOfDay(from), lte: endOfDay(to) },
       },
     },
     include: {
-      transaction: { select: { transactionDate: true } },
+      transaction: { select: { transactionDate: true, packingFee: true } },
     },
   })
 
@@ -210,6 +214,43 @@ export async function getProfitReport(
       hpp: existing.hpp + hpp,
       profit: existing.profit + profit,
     })
+  }
+
+  // Tambahkan packingFee ke revenue (packing fee = revenue murni, HPP = 0)
+  // Group packingFee by day dari transaksi yang sama
+  const packingByDay = new Map<string, number>()
+  let totalPackingFee = 0
+  for (const item of items) {
+    const date = format(item.transaction.transactionDate, "yyyy-MM-dd")
+    const packing = Number(item.transaction.packingFee ?? 0)
+    if (packing > 0) {
+      // Hanya hitung sekali per transaksi (bukan per item)
+      // Gunakan Set untuk track transactionId yang sudah dihitung
+    }
+    packingByDay.set(date, (packingByDay.get(date) ?? 0))
+  }
+
+  // Hitung packingFee per transaksi unik
+  const uniqueTrxPacking = new Map<string, { date: string; packing: number }>()
+  for (const item of items) {
+    if (!uniqueTrxPacking.has(item.transactionId)) {
+      uniqueTrxPacking.set(item.transactionId, {
+        date: format(item.transaction.transactionDate, "yyyy-MM-dd"),
+        packing: Number(item.transaction.packingFee ?? 0),
+      })
+    }
+  }
+  for (const { date, packing } of uniqueTrxPacking.values()) {
+    if (packing > 0) {
+      totalRevenue += packing
+      totalPackingFee += packing
+      const existing = byDay.get(date) ?? { revenue: 0, hpp: 0, profit: 0 }
+      byDay.set(date, {
+        revenue: existing.revenue + packing,
+        hpp: existing.hpp,
+        profit: existing.profit + packing,  // packing fee = pure profit
+      })
+    }
   }
 
   const totalProfit = totalRevenue - totalHPP

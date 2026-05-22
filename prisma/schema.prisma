@@ -102,6 +102,7 @@ model Product {
   buyPrice  Decimal  @db.Decimal(15, 2)
   sellPrice Decimal  @db.Decimal(15, 2)
   stock     Int      @default(0)
+  reservedStock Int  @default(0)  // stok yang di-reserve oleh DRAFT orders
   minStock  Int      @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -247,14 +248,21 @@ model Transaction {
   user            User          @relation(fields: [userId], references: [id])
   subtotal        Decimal       @db.Decimal(15, 2)
   discountAmount  Decimal       @db.Decimal(15, 2) @default(0)
+  packingFee      Decimal       @db.Decimal(15, 2) @default(0)  // biaya packing, diisi saat konfirmasi
   totalAmount     Decimal       @db.Decimal(15, 2)
-  paidAmount      Decimal       @db.Decimal(15, 2)
+  paidAmount      Decimal       @db.Decimal(15, 2) @default(0)
   changeAmount    Decimal       @db.Decimal(15, 2) @default(0)
   debtAmount      Decimal       @db.Decimal(15, 2) @default(0)
   depositUsed     Decimal       @db.Decimal(15, 2) @default(0)
   depositCreated  Decimal       @db.Decimal(15, 2) @default(0)
-  paymentMethod   PaymentMethod
-  paymentStatus   PaymentStatus
+  paymentMethod   PaymentMethod @default(CASH)
+  paymentStatus   PaymentStatus @default(UNPAID)
+  // Status konfirmasi: DRAFT = belum dikonfirmasi, CONFIRMED = sudah, CANCELLED = dibatalkan
+  confirmationStatus ConfirmationStatus @default(DRAFT)
+  confirmedAt     DateTime?
+  confirmedBy     String?
+  cancelledAt     DateTime?
+  cancelledBy     String?
   notes           String?
   transactionDate DateTime      @default(now())
   createdAt       DateTime      @default(now())
@@ -266,6 +274,12 @@ model Transaction {
   customerPayments CustomerPayment[]
 
   @@map("transactions")
+}
+
+enum ConfirmationStatus {
+  DRAFT
+  CONFIRMED
+  CANCELLED
 }
 
 enum PaymentMethod {

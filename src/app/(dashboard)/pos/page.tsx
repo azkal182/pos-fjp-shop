@@ -1,16 +1,11 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { CreditCard, ShoppingBag, SlidersHorizontal, X, Trash2 } from "lucide-react"
+import { ShoppingBag, SlidersHorizontal, X, Trash2, ClipboardList } from "lucide-react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { Badge } from "@/components/ui/badge"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   Sheet,
   SheetContent,
@@ -24,49 +19,22 @@ import { ProductSearch } from "@/features/pos/components/ProductSearch"
 import { CartItem } from "@/features/pos/components/CartItem"
 import { CartSummary } from "@/features/pos/components/CartSummary"
 import { CustomerSelect } from "@/features/pos/components/CustomerSelect"
-import { PaymentModal } from "@/features/pos/components/PaymentModal"
-import { Receipt } from "@/features/pos/components/Receipt"
 import { useCartStore } from "@/features/pos/stores/cart.store"
 import { useToast } from "@/hooks/useToast"
 
-interface TransactionResult {
-  id: string
-  code: string
-  totalAmount: number
-  subtotal: number
-  discountAmount: number
-  paidAmount: number
-  changeAmount: number
-  debtAmount: number
-  paymentMethod: string
-  paymentStatus: string
-  transactionDate: string
-  customer: { name: string } | null
-  items: {
-    id: string
-    productName: string
-    quantity: number
-    sellPrice: number
-    discountAmount: number
-    subtotal: number
-  }[]
-}
-
 export default function POSPage() {
+  const router = useRouter()
   const toast = useToast()
-  const { items, customerId, paymentMethod, paidAmount, totalAmount, discountAmount, clearCart } = useCartStore()
+  const { items, customerId, discountAmount, totalAmount, clearCart } = useCartStore()
 
-  const [isPaymentOpen, setIsPaymentOpen] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [lastTransaction, setLastTransaction] = useState<TransactionResult | null>(null)
-  const [isReceiptOpen, setIsReceiptOpen] = useState(false)
   const [isPanelOpen, setIsPanelOpen] = useState(false)
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
 
   const total = totalAmount()
   const cartEmpty = items.length === 0
   const totalQty = items.reduce((s, i) => s + i.quantity, 0)
-  const totalProducts = items.length // jumlah jenis produk
+  const totalProducts = items.length
 
   // Prevent navigation jika ada item di keranjang
   useEffect(() => {
@@ -80,7 +48,7 @@ export default function POSPage() {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload)
   }, [items.length])
 
-  async function handleCheckout(opts: { overpayAction: "return" | "deposit"; depositUsed: number; depositId?: string }) {
+  async function handleSaveDraft() {
     setIsSubmitting(true)
     try {
       const payload = {
@@ -91,12 +59,7 @@ export default function POSPage() {
           sellPrice: i.sellPrice,
           discountAmount: i.discountAmount,
         })),
-        paidAmount,
-        paymentMethod,
         discountAmount,
-        overpayAction: opts.overpayAction,
-        depositUsed: opts.depositUsed,
-        depositId: opts.depositId,
       }
       const res = await fetch("/api/transactions", {
         method: "POST",
@@ -104,12 +67,11 @@ export default function POSPage() {
         body: JSON.stringify(payload),
       })
       const json = await res.json()
-      if (!res.ok) throw new Error(json.error ?? "Checkout gagal")
-      setLastTransaction(json.data)
-      setIsPaymentOpen(false)
-      setIsPanelOpen(false)
-      setIsReceiptOpen(true)
-      toast.success("Transaksi berhasil!")
+      if (!res.ok) throw new Error(json.error ?? "Gagal menyimpan order")
+
+      clearCart()
+      toast.success(`Order ${json.data.code} berhasil disimpan`)
+      router.push(`/transactions/${json.data.id}/confirm`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Terjadi kesalahan")
     } finally {
@@ -133,19 +95,22 @@ export default function POSPage() {
       </div>
       <div className="border-t bg-background p-4 space-y-3">
         <div className="flex items-center justify-between">
-          <span className="text-sm font-medium text-muted-foreground">Total Tagihan</span>
+          <span className="text-sm font-medium text-muted-foreground">Total Produk</span>
           <CurrencyDisplay
             amount={total}
             className={`text-xl font-bold ${cartEmpty ? "text-muted-foreground" : "text-foreground"}`}
           />
         </div>
+        <p className="text-xs text-muted-foreground text-center">
+          Biaya packing & pembayaran diisi saat konfirmasi
+        </p>
         <Button
           className="w-full h-11 text-sm font-semibold gap-2"
-          disabled={cartEmpty}
-          onClick={() => setIsPaymentOpen(true)}
+          disabled={cartEmpty || isSubmitting}
+          onClick={handleSaveDraft}
         >
-          <CreditCard className="h-4 w-4" />
-          Proses Pembayaran
+          <ClipboardList className="h-4 w-4" />
+          {isSubmitting ? "Menyimpan..." : "Simpan Order"}
         </Button>
       </div>
     </>
@@ -178,7 +143,7 @@ export default function POSPage() {
           )}
         </div>
 
-        {/* Footer kiri — info + tombol kosongkan */}
+        {/* Footer kiri */}
         <div className="bg-background border-t px-3 py-2 sm:px-4 flex items-center justify-between gap-2">
           {!cartEmpty ? (
             <div className="flex items-center gap-3">
@@ -254,32 +219,29 @@ export default function POSPage() {
         description="Semua item di keranjang akan dihapus. Lanjutkan?"
         confirmLabel="Kosongkan"
       />
-
-      {/* Payment Modal */}
-      <PaymentModal
-        open={isPaymentOpen}
-        onOpenChange={setIsPaymentOpen}
-        onConfirm={handleCheckout}
-        isSubmitting={isSubmitting}
-      />
-
-      {/* Receipt Dialog */}
-      <Dialog open={isReceiptOpen} onOpenChange={setIsReceiptOpen}>
-        <DialogContent className="sm:max-w-sm max-w-[95vw]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <ShoppingBag className="h-4 w-4" />
-              Struk Transaksi
-            </DialogTitle>
-          </DialogHeader>
-          {lastTransaction && (
-            <Receipt
-              transaction={lastTransaction}
-              onClose={() => setIsReceiptOpen(false)}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
+}
+
+interface TransactionResult {
+  id: string
+  code: string
+  totalAmount: number
+  subtotal: number
+  discountAmount: number
+  paidAmount: number
+  changeAmount: number
+  debtAmount: number
+  paymentMethod: string
+  paymentStatus: string
+  transactionDate: string
+  customer: { name: string } | null
+  items: {
+    id: string
+    productName: string
+    quantity: number
+    sellPrice: number
+    discountAmount: number
+    subtotal: number
+  }[]
 }

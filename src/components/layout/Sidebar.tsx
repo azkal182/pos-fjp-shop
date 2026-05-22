@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation"
 import {
   LayoutDashboard, ShoppingCart, Package, Tag, Truck, ShoppingBag,
   ArrowLeftRight, Users, Receipt, CreditCard, BarChart2, Settings,
-  UserCog, Building2,
+  UserCog, Building2, ClipboardList,
 } from "lucide-react"
 import {
   Sidebar,
@@ -28,14 +28,14 @@ import logoCircle from "@/assets/logo-circle.png"
 
 const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
   LayoutDashboard, ShoppingCart, Package, Tag, Truck, ShoppingBag,
-  ArrowLeftRight, Users, Receipt, CreditCard, BarChart2, Settings, UserCog, Building2,
+  ArrowLeftRight, Users, Receipt, CreditCard, BarChart2, Settings, UserCog, Building2, ClipboardList,
 }
 
 // Kelompokkan nav items
 const navGroups = [
   {
     label: "Utama",
-    items: ["Dashboard", "Kasir (POS)"],
+    items: ["Dashboard", "Kasir (POS)", "Order Pending"],
   },
   {
     label: "Inventori",

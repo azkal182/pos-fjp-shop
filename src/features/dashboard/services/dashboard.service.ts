@@ -32,23 +32,23 @@ export async function getDashboardData(): Promise<DashboardData> {
   ] = await Promise.all([
     // Hari ini
     prisma.transaction.aggregate({
-      where: { paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: todayStart, lte: todayEnd } },
+      where: { confirmationStatus: "CONFIRMED", paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: todayStart, lte: todayEnd } },
       _sum: { totalAmount: true },
       _count: true,
     }),
     // Minggu ini
     prisma.transaction.aggregate({
-      where: { paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: weekStart, lte: todayEnd } },
+      where: { confirmationStatus: "CONFIRMED", paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: weekStart, lte: todayEnd } },
       _sum: { totalAmount: true },
     }),
     // Bulan ini
     prisma.transaction.aggregate({
-      where: { paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: monthStart, lte: monthEnd } },
+      where: { confirmationStatus: "CONFIRMED", paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: monthStart, lte: monthEnd } },
       _sum: { totalAmount: true },
     }),
     // Bulan lalu
     prisma.transaction.aggregate({
-      where: { paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: prevMonthStart, lte: prevMonthEnd } },
+      where: { confirmationStatus: "CONFIRMED", paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: prevMonthStart, lte: prevMonthEnd } },
       _sum: { totalAmount: true },
     }),
     // Total piutang outstanding (customer)
@@ -75,7 +75,7 @@ export async function getDashboardData(): Promise<DashboardData> {
     }).then((products) => products.filter((p) => p.stock <= p.minStock)),
     // Grafik 30 hari
     prisma.transaction.findMany({
-      where: { paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: thirtyDaysAgo, lte: todayEnd } },
+      where: { confirmationStatus: "CONFIRMED", paymentStatus: { in: ["PAID", "PARTIAL"] }, transactionDate: { gte: thirtyDaysAgo, lte: todayEnd } },
       select: { totalAmount: true, transactionDate: true },
       orderBy: { transactionDate: "asc" },
     }),
@@ -84,6 +84,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       by: ["productId"],
       where: {
         transaction: {
+          confirmationStatus: "CONFIRMED",
           paymentStatus: { in: ["PAID", "PARTIAL"] },
           transactionDate: { gte: monthStart, lte: monthEnd },
         },

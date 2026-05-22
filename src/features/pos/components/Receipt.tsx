@@ -17,6 +17,7 @@ interface ReceiptTransaction {
   totalAmount: number
   subtotal: number
   discountAmount: number
+  packingFee?: number
   paidAmount: number
   changeAmount: number
   debtAmount: number
@@ -104,6 +105,12 @@ export function Receipt({ transaction, onClose }: ReceiptProps) {
           <div className="flex justify-between text-red-600">
             <span>Diskon</span>
             <span>−<CurrencyDisplay amount={Number(transaction.discountAmount)} className="text-sm" /></span>
+          </div>
+        )}
+        {Number(transaction.packingFee ?? 0) > 0 && (
+          <div className="flex justify-between text-blue-600">
+            <span>Biaya Packing</span>
+            <span>+<CurrencyDisplay amount={Number(transaction.packingFee)} className="text-sm" /></span>
           </div>
         )}
         <div className="flex justify-between font-bold text-base">
