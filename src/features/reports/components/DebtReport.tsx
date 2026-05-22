@@ -40,25 +40,22 @@ export function DebtReport() {
   async function handleExportPdf() {
     if (!data) return
     await reload()
+    const freshStore = useSettingsStore.getState().store
 
-    // Fetch semua data hutang aktif (UNPAID + PARTIAL) untuk PDF
-    // Default API sudah filter UNPAID+PARTIAL, limit 500 untuk cover semua
     let debts: DebtRow[] = []
     try {
       const res = await fetch("/api/debts?limit=500&page=1")
       const json = await res.json()
       debts = Array.isArray(json.data) ? json.data : []
-    } catch {
-      // fallback: generate PDF tanpa detail baris
-    }
+    } catch {}
 
-    const logoBase64 = store.logoUrl ? await fetchImageAsBase64(store.logoUrl) : null
+    const logoBase64 = freshStore.logoUrl ? await fetchImageAsBase64(freshStore.logoUrl) : null
     await exportPdf(
       <DebtReportPdf
         debts={debts}
-        storeName={store.storeName || "FJP Shop"}
-        storeAddress={store.storeAddress}
-        storePhone={store.storePhone}
+        storeName={freshStore.storeName || "FJP Shop"}
+        storeAddress={freshStore.storeAddress}
+        storePhone={freshStore.storePhone}
         logoUrl={logoBase64 || undefined}
         totalOutstanding={data.totalOutstanding}
         customersWithDebt={data.totalCustomersWithDebt}

@@ -46,16 +46,17 @@ export function ProfitReport() {
   async function handleExportPdf() {
     if (!data) return
     await reload()
+    const freshStore = useSettingsStore.getState().store
     const dateFrom = currentFilters?.dateFrom ?? new Date(Date.now() - 30 * 86400000)
     const dateTo = currentFilters?.dateTo ?? new Date()
     const filename = `laporan-profit-${format(dateFrom, "yyyyMMdd")}-${format(dateTo, "yyyyMMdd")}.pdf`
-    const logoBase64 = store.logoUrl ? await fetchImageAsBase64(store.logoUrl) : null
+    const logoBase64 = freshStore.logoUrl ? await fetchImageAsBase64(freshStore.logoUrl) : null
     await exportPdf(
       <ProfitReportPdf
         data={data}
-        storeName={store.storeName || "FJP Shop"}
-        storeAddress={store.storeAddress}
-        storePhone={store.storePhone}
+        storeName={freshStore.storeName || "FJP Shop"}
+        storeAddress={freshStore.storeAddress}
+        storePhone={freshStore.storePhone}
         logoUrl={logoBase64 || undefined}
         dateFrom={dateFrom}
         dateTo={dateTo}

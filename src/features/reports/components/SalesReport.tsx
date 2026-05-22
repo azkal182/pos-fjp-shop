@@ -44,18 +44,20 @@ export function SalesReport() {
 
   async function handleExportPdf() {
     if (!data) return
-    await reload()  // selalu reload agar logo terbaru terambil
+    await reload()
+    // Baca state terbaru langsung dari store, bukan dari closure React
+    const freshStore = useSettingsStore.getState().store
     const dateFrom = currentFilters?.dateFrom ?? new Date(Date.now() - 30 * 86400000)
     const dateTo = currentFilters?.dateTo ?? new Date()
     const filename = `laporan-penjualan-${format(dateFrom, "yyyyMMdd")}-${format(dateTo, "yyyyMMdd")}.pdf`
-    // Fetch logo sebagai base64 agar tidak ada masalah CORS saat PDF di-generate di browser
-    const logoBase64 = store.logoUrl ? await fetchImageAsBase64(store.logoUrl) : null
+    const logoBase64 = freshStore.logoUrl ? await fetchImageAsBase64(freshStore.logoUrl) : null
+    console.log("[PDF Export] store:", { storeName: freshStore.storeName, storeAddress: freshStore.storeAddress, logoUrl: freshStore.logoUrl, logoBase64: logoBase64 ? `${logoBase64.slice(0, 40)}...` : null })
     await exportPdf(
       <SalesReportPdf
         data={data}
-        storeName={store.storeName || "FJP Shop"}
-        storeAddress={store.storeAddress}
-        storePhone={store.storePhone}
+        storeName={freshStore.storeName || "FJP Shop"}
+        storeAddress={freshStore.storeAddress}
+        storePhone={freshStore.storePhone}
         logoUrl={logoBase64 || undefined}
         dateFrom={dateFrom}
         dateTo={dateTo}
