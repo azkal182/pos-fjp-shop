@@ -33,7 +33,7 @@ interface DebtRow {
   debtDate: Date | string
   aging: AgingResult | null
   customer: { id: string; name: string; phone: string | null }
-  transaction: { code: string }
+  transaction: { code: string; id?: string }
 }
 
 interface DebtTableProps {
@@ -91,7 +91,7 @@ export function DebtTable({
     {
       header: "Transaksi",
       render: (row) => (
-        <Link href={`/transactions/${row.id}`} className="font-mono text-xs hover:underline text-primary">
+        <Link href={`/transactions/${row.transaction.id}`} className="font-mono text-xs hover:underline text-primary">
           {row.transaction.code}
         </Link>
       ),

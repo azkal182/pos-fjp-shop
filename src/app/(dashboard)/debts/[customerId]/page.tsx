@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, ExternalLink } from "lucide-react"
+import { ArrowLeft, ExternalLink, Banknote } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -11,6 +11,7 @@ import { DebtTable } from "@/features/debts/components/DebtTable"
 import { CustomerDebtSummary } from "@/features/customers/components/CustomerDebtSummary"
 import { CustomerLedger } from "@/features/debts/components/CustomerLedger"
 import { DepositCard } from "@/features/deposits/components/DepositCard"
+import { DebtPaymentForm } from "@/features/debts/components/DebtPaymentForm"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
 import { useToast } from "@/hooks/useToast"
 import type { PaginationMeta } from "@/types"
@@ -47,6 +48,7 @@ export default function CustomerDebtsPage() {
   const [page, setPage] = useState(1)
   const [filters, setFilters] = useState({ search: "", status: "" })
   const [ledgerRefreshKey, setLedgerRefreshKey] = useState(0)
+  const [isPayOpen, setIsPayOpen] = useState(false)
 
   useEffect(() => {
     fetch(`/api/customers/${customerId}`)
@@ -83,18 +85,26 @@ export default function CustomerDebtsPage() {
   function handlePaymentSuccess() {
     fetchDebts()
     setLedgerRefreshKey((k) => k + 1)
+    setIsPayOpen(false)
   }
 
   if (!customer) return <LoadingSpinner centered />
 
   return (
+    <>
     <PageWrapper
       title={`Hutang — ${customer.name}`}
       actions={
-        <Button variant="outline" onClick={() => router.back()}>
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Kembali
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => router.back()}>
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Kembali
+          </Button>
+          <Button onClick={() => setIsPayOpen(true)}>
+            <Banknote className="h-4 w-4 mr-2" />
+            Bayar Hutang
+          </Button>
+        </div>
       }
     >
       <div className="grid gap-6 lg:grid-cols-3">
@@ -150,5 +160,16 @@ export default function CustomerDebtsPage() {
         </div>
       </div>
     </PageWrapper>
+
+    {customer && (
+      <DebtPaymentForm
+        open={isPayOpen}
+        onOpenChange={setIsPayOpen}
+        customerId={customerId}
+        customerName={customer.name}
+        onSuccess={handlePaymentSuccess}
+      />
+    )}
+  </>
   )
 }

@@ -24,7 +24,7 @@ export const GET = withHandler(async (req: NextRequest) => {
       where,
       include: {
         customer: { select: { id: true, name: true, phone: true } },
-        transaction: { select: { code: true } },
+        transaction: { select: { id: true, code: true } },
       },
       orderBy: { debtDate: "asc" },
       skip: (page - 1) * limit,
