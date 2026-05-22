@@ -22,26 +22,26 @@ export function PdfHeader({
   return (
     <View style={shared.docHeader}>
       {/* Kiri: logo + info toko */}
-      <View style={[shared.docHeaderLeft, { flexDirection: "row", alignItems: "flex-start", gap: 8 }]}>
-        {logoUrl && (
+      <View style={{ flex: 1, flexDirection: "row", alignItems: "flex-start", gap: 8 }}>
+        {logoUrl ? (
           <Image
             src={logoUrl}
-            style={{ width: 40, height: 40, objectFit: "contain" }}
+            style={{ width: 44, height: 44, objectFit: "contain", flexShrink: 0 }}
           />
-        )}
+        ) : null}
         <View style={{ flex: 1 }}>
           <Text style={shared.storeName}>{storeName}</Text>
-          {storeAddress && <Text style={shared.storeInfo}>{storeAddress}</Text>}
-          {storePhone && <Text style={shared.storeInfo}>Telp: {storePhone}</Text>}
+          {storeAddress ? <Text style={shared.storeInfo}>{storeAddress}</Text> : null}
+          {storePhone ? <Text style={shared.storeInfo}>Telp: {storePhone}</Text> : null}
         </View>
       </View>
 
       {/* Kanan: judul dokumen */}
       <View style={shared.docHeaderRight}>
         <Text style={shared.docTitle}>{title}</Text>
-        {subtitle && <Text style={[shared.docMeta, { fontSize: 9, color: "#374151" }]}>{subtitle}</Text>}
-        {period && <Text style={shared.docMeta}>Periode: {period}</Text>}
-        {docNumber && <Text style={shared.docMeta}>No: {docNumber}</Text>}
+        {subtitle ? <Text style={[shared.docMeta, { fontSize: 9, color: "#374151" }]}>{subtitle}</Text> : null}
+        {period ? <Text style={shared.docMeta}>Periode: {period}</Text> : null}
+        {docNumber ? <Text style={shared.docMeta}>No: {docNumber}</Text> : null}
         <Text style={shared.docMeta}>
           Dicetak: {format(printedAt ?? new Date(), "dd MMMM yyyy HH:mm", { locale: idLocale })}
         </Text>

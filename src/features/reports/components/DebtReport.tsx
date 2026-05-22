@@ -27,7 +27,7 @@ export function DebtReport() {
   const [data, setData] = useState<DebtReportType | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const { exportPdf, isGenerating } = usePdfExport()
-  const { store, load } = useSettingsStore()
+  const { store, reload } = useSettingsStore()
 
   useEffect(() => {
     fetch("/api/reports/debts")
@@ -39,7 +39,7 @@ export function DebtReport() {
 
   async function handleExportPdf() {
     if (!data) return
-    await load()
+    await reload()
 
     // Fetch semua data hutang aktif (UNPAID + PARTIAL) untuk PDF
     // Default API sudah filter UNPAID+PARTIAL, limit 500 untuk cover semua

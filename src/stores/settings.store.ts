@@ -19,6 +19,29 @@ interface SettingsState {
   pos: PosSettings
   isLoaded: boolean
   load: () => Promise<void>
+  reload: () => Promise<void>  // force reload, abaikan cache
+}
+
+async function fetchSettings(set: (state: Partial<SettingsState>) => void) {
+  const res = await fetch("/api/settings")
+  const json = await res.json()
+  const data = json.data ?? {}
+  const storeData = data.STORE ?? {}
+  const posData = data.POS ?? {}
+
+  set({
+    store: {
+      storeName: storeData["store_name"] ?? "FJP Shop",
+      storeAddress: storeData["store_address"] ?? "",
+      storePhone: storeData["store_phone"] ?? "",
+      receiptNote: storeData["store_receipt_note"] ?? "",
+      logoUrl: storeData["store_logo_url"] ?? "",
+    },
+    pos: {
+      paymentMethods: (posData["pos_payment_methods"] ?? "CASH,TRANSFER").split(",").filter(Boolean),
+    },
+    isLoaded: true,
+  })
 }
 
 export const useSettingsStore = create<SettingsState>((set, get) => ({
@@ -28,26 +51,12 @@ export const useSettingsStore = create<SettingsState>((set, get) => ({
 
   load: async () => {
     if (get().isLoaded) return
-    try {
-      const res = await fetch("/api/settings")
-      const json = await res.json()
-      const data = json.data ?? {}
-      const storeData = data.STORE ?? {}
-      const posData = data.POS ?? {}
+    try { await fetchSettings(set) } catch {}
+  },
 
-      set({
-        store: {
-          storeName: storeData["store_name"] ?? "FJP Shop",
-          storeAddress: storeData["store_address"] ?? "",
-          storePhone: storeData["store_phone"] ?? "",
-          receiptNote: storeData["store_receipt_note"] ?? "",
-          logoUrl: storeData["store_logo_url"] ?? "",
-        },
-        pos: {
-          paymentMethods: (posData["pos_payment_methods"] ?? "CASH,TRANSFER").split(",").filter(Boolean),
-        },
-        isLoaded: true,
-      })
-    } catch {}
+  reload: async () => {
+    // Force reload — invalidate cache dulu
+    set({ isLoaded: false })
+    try { await fetchSettings(set) } catch {}
   },
 }))

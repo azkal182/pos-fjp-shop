@@ -26,7 +26,7 @@ export function SalesReport() {
   const [isLoading, setIsLoading] = useState(false)
   const [currentFilters, setCurrentFilters] = useState<any>(null)
   const { exportPdf, isGenerating } = usePdfExport()
-  const { store, load } = useSettingsStore()
+  const { store, reload } = useSettingsStore()
 
   const fetchData = useCallback(async (filters: any) => {
     setIsLoading(true)
@@ -44,7 +44,7 @@ export function SalesReport() {
 
   async function handleExportPdf() {
     if (!data) return
-    await load()
+    await reload()  // selalu reload agar logo terbaru terambil
     const dateFrom = currentFilters?.dateFrom ?? new Date(Date.now() - 30 * 86400000)
     const dateTo = currentFilters?.dateTo ?? new Date()
     const filename = `laporan-penjualan-${format(dateFrom, "yyyyMMdd")}-${format(dateTo, "yyyyMMdd")}.pdf`

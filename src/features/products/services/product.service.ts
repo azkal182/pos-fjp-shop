@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma"
-import { ConflictError, NotFoundError } from "@/lib/exceptions"
+import { ConflictError, NotFoundError, ValidationError } from "@/lib/exceptions"
 import { log } from "@/lib/logger"
 import { calculatePagination } from "@/lib/api-response"
 import type { CreateProductInput, UpdateProductInput } from "../schemas/product.schema"
@@ -59,18 +59,37 @@ export async function createProduct(data: CreateProductInput) {
   const existing = await prisma.product.findUnique({ where: { code: data.code } })
   if (existing) throw new ConflictError(`Kode produk "${data.code}" sudah digunakan`)
 
-  return prisma.product.create({
-    data: {
-      code: data.code,
-      name: data.name,
-      categoryId: data.categoryId,
-      unit: data.unit,
-      buyPrice: data.buyPrice,
-      sellPrice: data.sellPrice,
-      minStock: data.minStock ?? 0,
-      isActive: data.isActive ?? true,
-    },
-    include: { category: true },
+  // Validasi vendor
+  const vendor = await prisma.vendor.findUnique({ where: { id: data.vendorId }, select: { id: true, isActive: true } })
+  if (!vendor) throw new NotFoundError("Vendor")
+  if (!vendor.isActive) throw new ValidationError("Vendor tidak aktif")
+
+  return prisma.$transaction(async (tx) => {
+    const product = await tx.product.create({
+      data: {
+        code: data.code,
+        name: data.name,
+        categoryId: data.categoryId,
+        unit: data.unit,
+        buyPrice: data.buyPrice,
+        sellPrice: data.sellPrice,
+        minStock: data.minStock ?? 0,
+        isActive: data.isActive ?? true,
+      },
+      include: { category: true },
+    })
+
+    // Otomatis buat ProductVendorPrice untuk vendor utama
+    await tx.productVendorPrice.create({
+      data: {
+        productId: product.id,
+        vendorId: data.vendorId,
+        buyPrice: data.buyPrice,
+        isPreferred: true,
+      },
+    })
+
+    return product
   })
 }
 

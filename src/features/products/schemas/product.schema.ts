@@ -5,6 +5,7 @@ export const createProductSchema = z
     code: z.string().min(1, "Kode wajib diisi").max(50, "Kode maksimal 50 karakter").trim(),
     name: z.string().min(1, "Nama wajib diisi").max(200, "Nama maksimal 200 karakter").trim(),
     categoryId: z.string().min(1, "Kategori wajib dipilih"),
+    vendorId: z.string().min(1, "Vendor wajib dipilih"),  // vendor utama produk
     unit: z.string().min(1, "Satuan wajib diisi").trim(),
     buyPrice: z.number().min(0, "Harga beli tidak boleh negatif"),
     sellPrice: z.number().min(0, "Harga jual tidak boleh negatif"),
@@ -21,6 +22,7 @@ export const updateProductSchema = z
     code: z.string().min(1).max(50).trim().optional(),
     name: z.string().min(1).max(200).trim().optional(),
     categoryId: z.string().min(1).optional(),
+    vendorId: z.string().min(1).optional(),
     unit: z.string().min(1).trim().optional(),
     buyPrice: z.number().min(0).optional(),
     sellPrice: z.number().min(0).optional(),

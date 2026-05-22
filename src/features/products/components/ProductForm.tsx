@@ -25,27 +25,12 @@ import {
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
 import { createProductSchema, type CreateProductInput } from "../schemas/product.schema"
 
-interface Category {
-  id: string
-  name: string
-}
+interface Category { id: string; name: string }
+interface Vendor { id: string; name: string }
 
 const UNIT_OPTIONS = [
-  "pcs",
-  "kg",
-  "gram",
-  "liter",
-  "ml",
-  "box",
-  "karton",
-  "lusin",
-  "pak",
-  "botol",
-  "kaleng",
-  "sachet",
-  "lembar",
-  "meter",
-  "roll",
+  "pcs", "kg", "gram", "liter", "ml", "box", "karton",
+  "lusin", "pak", "botol", "kaleng", "sachet", "lembar", "meter", "roll",
 ]
 
 function generateSKU(): string {
@@ -74,6 +59,7 @@ export function ProductForm({
   mode = "create",
 }: ProductFormProps) {
   const [categories, setCategories] = useState<Category[]>([])
+  const [vendors, setVendors] = useState<Vendor[]>([])
 
   const {
     register,
@@ -88,6 +74,7 @@ export function ProductForm({
       code: mode === "create" ? generateSKU() : "",
       name: "",
       categoryId: "",
+      vendorId: "",
       unit: "",
       buyPrice: 0,
       sellPrice: 0,
@@ -99,17 +86,17 @@ export function ProductForm({
   })
 
   const isActive = watch("isActive")
-  const codeValue = watch("code")
 
   useEffect(() => {
     if (open) {
-      // Auto-generate SKU saat form create dibuka
-      if (mode === "create") {
-        setValue("code", generateSKU())
-      }
+      if (mode === "create") setValue("code", generateSKU())
       fetch("/api/categories")
         .then((r) => r.json())
         .then((json) => setCategories(json.data ?? []))
+        .catch(() => {})
+      fetch("/api/vendors?isActive=true&limit=100")
+        .then((r) => r.json())
+        .then((json) => setVendors(json.data ?? []))
         .catch(() => {})
     }
   }, [open, mode, setValue])
@@ -152,7 +139,6 @@ export function ProductForm({
                   size="icon"
                   onClick={() => setValue("code", generateSKU())}
                   title="Generate ulang SKU"
-                  aria-label="Generate ulang SKU"
                 >
                   <RefreshCw className="h-4 w-4" />
                 </Button>
@@ -173,6 +159,34 @@ export function ProductForm({
             {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
           </div>
 
+          {/* Vendor — wajib saat create */}
+          {mode === "create" && (
+            <div className="space-y-2">
+              <Label>
+                Vendor <span className="text-destructive">*</span>
+              </Label>
+              <Select
+                defaultValue={defaultValues?.vendorId}
+                onValueChange={(val) => setValue("vendorId", val)}
+              >
+                <SelectTrigger aria-invalid={!!errors.vendorId}>
+                  <SelectValue placeholder="Pilih vendor utama produk..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {vendors.map((v) => (
+                    <SelectItem key={v.id} value={v.id}>{v.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.vendorId && (
+                <p className="text-xs text-destructive">{errors.vendorId.message}</p>
+              )}
+              <p className="text-xs text-muted-foreground">
+                Vendor utama produk ini. Harga beli dari vendor lain bisa ditambah di halaman detail produk.
+              </p>
+            </div>
+          )}
+
           {/* Kategori & Satuan */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -186,9 +200,7 @@ export function ProductForm({
                 </SelectTrigger>
                 <SelectContent>
                   {categories.map((cat) => (
-                    <SelectItem key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </SelectItem>
+                    <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -208,9 +220,7 @@ export function ProductForm({
                 </SelectTrigger>
                 <SelectContent>
                   {UNIT_OPTIONS.map((unit) => (
-                    <SelectItem key={unit} value={unit}>
-                      {unit}
-                    </SelectItem>
+                    <SelectItem key={unit} value={unit}>{unit}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
