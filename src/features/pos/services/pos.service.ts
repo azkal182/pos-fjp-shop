@@ -213,30 +213,18 @@ export async function processCheckout(payload: CheckoutInput, userId: string) {
         finalChangeAmount = 0
         log.debug("[POS]", "Overpay allocated to old debt (FIFO)", { overpayAmount })
       } else if (overpayAction === "deposit") {
-        // Simpan sebagai deposit
+        // Simpan sebagai deposit — gunakan createDeposit() helper agar konsisten
         depositCreated = overpayAmount
-        await addEntry({
-          partyType: "CUSTOMER",
-          partyId: customerId,
-          type: "DEPOSIT_IN",
-          direction: "CREDIT",
-          amount: overpayAmount,
-          description: `Deposit dari kelebihan bayar ${code}`,
-          referenceType: "TRANSACTION",
-          referenceId: trx.id,
-          createdBy: userId,
-        }, tx)
-        // Buat Deposit record
-        await tx.deposit.create({
-          data: {
-            partyType: "CUSTOMER",
-            partyId: customerId,
-            amount: overpayAmount,
-            balance: overpayAmount,
-            source: "OVERPAY_TRANSACTION",
-            sourceId: trx.id,
-          },
-        })
+        await createDeposit(
+          "CUSTOMER",
+          customerId,
+          overpayAmount,
+          "OVERPAY_TRANSACTION",
+          trx.id,
+          userId,
+          `Kelebihan bayar ${code}`,
+          tx
+        )
         log.debug("[POS]", "Overpay saved as customer deposit", { depositCreated })
       } else {
         // Kembalikan tunai (default)
