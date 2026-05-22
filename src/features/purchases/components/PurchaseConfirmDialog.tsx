@@ -3,11 +3,11 @@
 /**
  * PurchaseConfirmDialog
  * Dialog konfirmasi sebelum simpan pembelian.
- * Menampilkan ringkasan order + upload foto nota (opsional).
+ * Upload foto nota vendor WAJIB sebelum bisa simpan.
  */
 
 import { useState } from "react"
-import { CheckCircle2, AlertCircle, Loader2, ImageIcon, X } from "lucide-react"
+import { CheckCircle2, AlertCircle, Loader2, ImageIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
@@ -39,7 +39,7 @@ interface PurchaseConfirmDialogProps {
   paidAmount: number | undefined
   paymentMethod: string
   isSubmitting: boolean
-  onConfirm: (receiptImageUrl: string | null) => void
+  onConfirm: (receiptImageUrl: string) => void
 }
 
 export function PurchaseConfirmDialog({
@@ -55,6 +55,7 @@ export function PurchaseConfirmDialog({
   onConfirm,
 }: PurchaseConfirmDialogProps) {
   const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null)
+  const [showError, setShowError] = useState(false)
 
   const paid = paidAmount ?? 0
   const debtAmount = Math.max(0, cartTotal - paid)
@@ -64,14 +65,25 @@ export function PurchaseConfirmDialog({
   const paymentLabel = paymentMethod === "CASH" ? "Tunai" : "Transfer"
 
   function handleConfirm() {
+    if (!receiptImageUrl) {
+      setShowError(true)
+      return
+    }
+    setShowError(false)
     onConfirm(receiptImageUrl)
   }
 
   function handleClose() {
     if (!isSubmitting) {
       setReceiptImageUrl(null)
+      setShowError(false)
       onOpenChange(false)
     }
+  }
+
+  function handleImageChange(url: string | null) {
+    setReceiptImageUrl(url)
+    if (url) setShowError(false)
   }
 
   return (
@@ -87,7 +99,7 @@ export function PurchaseConfirmDialog({
             Konfirmasi Pembelian
           </DialogTitle>
           <DialogDescription>
-            Periksa kembali sebelum menyimpan. Upload foto nota vendor jika ada.
+            Periksa kembali dan upload foto nota vendor sebelum menyimpan.
           </DialogDescription>
         </DialogHeader>
 
@@ -175,23 +187,35 @@ export function PurchaseConfirmDialog({
 
           <Separator />
 
-          {/* Upload nota */}
+          {/* Upload nota — WAJIB */}
           <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <ImageIcon className="h-4 w-4 text-muted-foreground" />
-              <p className="text-sm font-medium">Foto Nota Vendor</p>
-              <span className="text-xs text-muted-foreground">(opsional)</span>
+              <ImageIcon className={`h-4 w-4 ${showError ? "text-destructive" : "text-muted-foreground"}`} />
+              <p className={`text-sm font-medium ${showError ? "text-destructive" : ""}`}>
+                Foto Nota Vendor
+              </p>
+              <span className="text-xs font-semibold text-destructive">* wajib</span>
             </div>
             <p className="text-xs text-muted-foreground">
               Upload foto nota/invoice dari vendor sebagai bukti pembelian.
             </p>
-            <ImageUpload
-              value={receiptImageUrl}
-              onChange={setReceiptImageUrl}
-              folder="purchase-receipts"
-              label=""
-              hint="JPG, PNG, WebP. Maks 5 MB."
-            />
+
+            <div className={showError ? "rounded-lg ring-2 ring-destructive ring-offset-1" : ""}>
+              <ImageUpload
+                value={receiptImageUrl}
+                onChange={handleImageChange}
+                folder="purchase-receipts"
+                label=""
+                hint="JPG, PNG, WebP. Maks 5 MB."
+              />
+            </div>
+
+            {showError && (
+              <p className="text-xs text-destructive flex items-center gap-1.5">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                Foto nota wajib diupload sebelum menyimpan pembelian
+              </p>
+            )}
           </div>
 
           {/* Actions */}

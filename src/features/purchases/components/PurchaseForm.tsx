@@ -527,7 +527,7 @@ export function PurchaseForm({ onSuccess, defaultVendorId }: PurchaseFormProps) 
     setIsSubmitting(false)
   }
 
-  async function submitPurchase(data: CreatePurchaseInput, confirmedPriceUpdates: string[], receiptImageUrl: string | null) {
+  async function submitPurchase(data: CreatePurchaseInput, confirmedPriceUpdates: string[], receiptImageUrl: string) {
     setIsSubmitting(true)
     try {
       const res = await fetch("/api/purchases", {
