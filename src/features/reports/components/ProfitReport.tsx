@@ -8,8 +8,13 @@ import { ReportFilters } from "./ReportFilters"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { DataTable, type Column } from "@/components/shared/DataTable"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Button } from "@/components/ui/button"
+import { FileDown, Loader2 } from "lucide-react"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
+import { usePdfExport } from "@/lib/pdf/usePdfExport"
+import { ProfitReportPdf } from "../pdf/ProfitReportPdf"
+import { useSettingsStore } from "@/stores/settings.store"
 import type { ProfitReport as ProfitReportType, ProfitDataPoint } from "../types/report.types"
 
 function formatRevenue(v: number) {
@@ -21,9 +26,13 @@ function formatRevenue(v: number) {
 export function ProfitReport() {
   const [data, setData] = useState<ProfitReportType | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [currentFilters, setCurrentFilters] = useState<any>(null)
+  const { exportPdf, isGenerating } = usePdfExport()
+  const { store, load } = useSettingsStore()
 
   const fetchData = useCallback(async (filters: any) => {
     setIsLoading(true)
+    setCurrentFilters(filters)
     try {
       const params = new URLSearchParams()
       if (filters.dateFrom) params.set("dateFrom", filters.dateFrom.toISOString())
@@ -33,6 +42,25 @@ export function ProfitReport() {
       setData(json.data)
     } catch {} finally { setIsLoading(false) }
   }, [])
+
+  async function handleExportPdf() {
+    if (!data) return
+    await load()
+    const dateFrom = currentFilters?.dateFrom ?? new Date(Date.now() - 30 * 86400000)
+    const dateTo = currentFilters?.dateTo ?? new Date()
+    const filename = `laporan-profit-${format(dateFrom, "yyyyMMdd")}-${format(dateTo, "yyyyMMdd")}.pdf`
+    await exportPdf(
+      <ProfitReportPdf
+        data={data}
+        storeName={store.storeName || "FJP Shop"}
+        storeAddress={store.storeAddress}
+        storePhone={store.storePhone}
+        dateFrom={dateFrom}
+        dateTo={dateTo}
+      />,
+      filename
+    )
+  }
 
   const columns: Column<ProfitDataPoint>[] = [
     {
@@ -57,7 +85,15 @@ export function ProfitReport() {
 
   return (
     <div className="space-y-6">
-      <ReportFilters onFilter={fetchData} />
+      <div className="flex items-center justify-between gap-4">
+        <ReportFilters onFilter={fetchData} />
+        {data && (
+          <Button variant="outline" size="sm" onClick={handleExportPdf} disabled={isGenerating} className="gap-2 shrink-0">
+            {isGenerating ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileDown className="h-4 w-4" />}
+            Export PDF
+          </Button>
+        )}
+      </div>
 
       {data && (
         <div className="space-y-3">
