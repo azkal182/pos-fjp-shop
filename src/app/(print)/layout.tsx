@@ -3,7 +3,12 @@
  * Tidak ada sidebar, header, atau theme dashboard.
  * Hanya HTML + CSS minimal untuk printer thermal.
  */
-export default function PrintLayout({ children }: { children: React.ReactNode }) {
+
+interface PrintLayoutProps {
+  children: React.ReactNode
+}
+
+export default function PrintLayout({ children }: PrintLayoutProps) {
   return (
     <html lang="id">
       <head>
@@ -82,9 +87,13 @@ const PRINT_CSS = `
       box-shadow: none !important;
       border-radius: 0 !important;
     }
+    /*
+     * @page size diset via JS di ThermalReceipt berdasarkan receiptWidth dari DB.
+     * Default fallback 80mm jika JS belum jalan.
+     */
     @page {
+      size: 80mm auto;
       margin: 0;
-      /* width diset via JS dari printer settings */
     }
   }
 `

@@ -3,7 +3,7 @@
 /**
  * ThermalReceipt — wrapper halaman print.
  * Auto-print saat load, tampilkan tombol aksi di screen.
- * Render konten nota via ReceiptContent.
+ * Inject @page size dinamis sesuai receiptWidth dari DB.
  */
 
 import { useEffect } from "react"
@@ -24,8 +24,20 @@ export function ThermalReceipt({
   receiptWidth = "80mm",
 }: ThermalReceiptProps) {
   useEffect(() => {
+    // Set CSS variable untuk lebar tombol aksi di screen
     document.documentElement.style.setProperty("--receipt-width", receiptWidth)
 
+    // Inject @page size dinamis — ini yang mengontrol lebar cetak di printer
+    const styleId = "thermal-page-size"
+    let styleEl = document.getElementById(styleId) as HTMLStyleElement | null
+    if (!styleEl) {
+      styleEl = document.createElement("style")
+      styleEl.id = styleId
+      document.head.appendChild(styleEl)
+    }
+    styleEl.textContent = `@media print { @page { size: ${receiptWidth} auto; margin: 0; } }`
+
+    // Tunggu gambar logo load sebelum print
     const images = document.querySelectorAll("img")
     if (images.length === 0) {
       setTimeout(() => window.print(), 300)

@@ -3,6 +3,9 @@
  * Halaman cetak nota thermal — bersih tanpa dashboard layout.
  * Buka di tab baru, lalu window.print() otomatis.
  */
+// Selalu fetch fresh — jangan cache, karena printer settings bisa berubah
+export const dynamic = "force-dynamic"
+
 import { notFound } from "next/navigation"
 import { prisma } from "@/lib/prisma"
 import { getStoreSettings, getPrinterSettings } from "@/features/settings/services/settings.service"
