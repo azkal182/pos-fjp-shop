@@ -18,7 +18,7 @@ import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
 import { useToast } from "@/hooks/useToast"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
-import type { CreateProductInput } from "@/features/products/schemas/product.schema"
+import type { CreateProductInput, EditProductInput } from "@/features/products/schemas/product.schema"
 
 interface StockMovement {
   id: string
@@ -89,7 +89,7 @@ export default function ProductDetailPage() {
     fetchMovements()
   }, [id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  async function handleUpdate(formData: CreateProductInput) {
+  async function handleUpdate(formData: CreateProductInput | EditProductInput) {
     setIsUpdating(true)
     try {
       const res = await fetch(`/api/products/${id}`, {

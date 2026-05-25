@@ -21,7 +21,7 @@ import { ProductForm } from "./ProductForm"
 import { useToast } from "@/hooks/useToast"
 import type { PaginationMeta } from "@/types"
 import type { ProductWithCategory } from "../types/product.types"
-import type { CreateProductInput } from "../schemas/product.schema"
+import type { CreateProductInput, EditProductInput } from "../schemas/product.schema"
 
 interface Category {
   id: string
@@ -67,7 +67,7 @@ export function ProductTable({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDeactivating, setIsDeactivating] = useState(false)
 
-  async function handleEdit(formData: CreateProductInput) {
+  async function handleEdit(formData: CreateProductInput | EditProductInput) {
     if (!editTarget) return
     setIsSubmitting(true)
     try {

@@ -8,7 +8,7 @@ import { ProductTable } from "@/features/products/components/ProductTable"
 import { ProductForm } from "@/features/products/components/ProductForm"
 import { useProducts } from "@/features/products/hooks/useProducts"
 import { useToast } from "@/hooks/useToast"
-import type { CreateProductInput } from "@/features/products/schemas/product.schema"
+import type { CreateProductInput, EditProductInput } from "@/features/products/schemas/product.schema"
 
 interface Category { id: string; name: string }
 
@@ -29,7 +29,7 @@ export default function ProductsPage() {
     ]).catch(() => {})
   }, [])
 
-  async function handleCreate(formData: CreateProductInput) {
+  async function handleCreate(formData: CreateProductInput | EditProductInput) {
     setIsCreating(true)
     try {
       const res = await fetch("/api/products", {

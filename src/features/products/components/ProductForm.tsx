@@ -23,7 +23,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
-import { createProductSchema, type CreateProductInput } from "../schemas/product.schema"
+import { createProductSchema, editProductSchema, type CreateProductInput, type EditProductInput } from "../schemas/product.schema"
 
 interface Category { id: string; name: string }
 interface Vendor { id: string; name: string }
@@ -35,17 +35,19 @@ const UNIT_OPTIONS = [
 
 function generateSKU(): string {
   const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-  const random = Array.from({ length: 6 }, () =>
+  // Pakai 4 karakter random + 4 karakter dari timestamp (base36) untuk uniqueness
+  const random = Array.from({ length: 4 }, () =>
     chars.charAt(Math.floor(Math.random() * chars.length))
   ).join("")
-  return `SKU-${random}`
+  const ts = Date.now().toString(36).toUpperCase().slice(-4)
+  return `SKU-${ts}${random}`
 }
 
 interface ProductFormProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   defaultValues?: Partial<CreateProductInput>
-  onSubmit: (data: CreateProductInput) => Promise<void>
+  onSubmit: (data: CreateProductInput | EditProductInput) => Promise<void>
   isLoading?: boolean
   mode?: "create" | "edit"
 }
@@ -68,13 +70,13 @@ export function ProductForm({
     setValue,
     watch,
     formState: { errors },
-  } = useForm<CreateProductInput>({
-    resolver: zodResolver(createProductSchema),
+  } = useForm<CreateProductInput | EditProductInput>({
+    resolver: zodResolver(mode === "create" ? createProductSchema : editProductSchema),
     defaultValues: {
       code: mode === "create" ? generateSKU() : "",
       name: "",
       categoryId: "",
-      vendorId: "",
+      ...(mode === "create" ? { vendorId: "" } : {}),
       unit: "",
       buyPrice: 0,
       sellPrice: 0,
@@ -82,7 +84,7 @@ export function ProductForm({
       isActive: true,
       ...defaultValues,
     },
-    values: defaultValues as CreateProductInput | undefined,
+    values: defaultValues as (CreateProductInput | EditProductInput) | undefined,
   })
 
   const isActive = watch("isActive")
@@ -106,7 +108,7 @@ export function ProductForm({
     onOpenChange(false)
   }
 
-  async function handleFormSubmit(data: CreateProductInput) {
+  async function handleFormSubmit(data: CreateProductInput | EditProductInput) {
     await onSubmit(data)
     reset()
   }
@@ -167,9 +169,9 @@ export function ProductForm({
               </Label>
               <Select
                 defaultValue={defaultValues?.vendorId}
-                onValueChange={(val) => setValue("vendorId", val)}
+                onValueChange={(val) => setValue("vendorId" as any, val)}
               >
-                <SelectTrigger aria-invalid={!!errors.vendorId}>
+                <SelectTrigger aria-invalid={!!(errors as any).vendorId}>
                   <SelectValue placeholder="Pilih vendor utama produk..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -178,8 +180,8 @@ export function ProductForm({
                   ))}
                 </SelectContent>
               </Select>
-              {errors.vendorId && (
-                <p className="text-xs text-destructive">{errors.vendorId.message}</p>
+              {(errors as any).vendorId && (
+                <p className="text-xs text-destructive">{(errors as any).vendorId.message}</p>
               )}
               <p className="text-xs text-muted-foreground">
                 Vendor utama produk ini. Harga beli dari vendor lain bisa ditambah di halaman detail produk.
