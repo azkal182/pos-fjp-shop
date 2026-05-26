@@ -231,7 +231,6 @@ model Customer {
   transactions Transaction[]
   debts        Debt[]
   payments     CustomerPayment[]
-  deposits     Deposit[]
 
   @@map("customers")
 }
@@ -534,8 +533,6 @@ model Deposit {
   createdAt      DateTime      @default(now())
 
   usages   DepositUsage[]
-  // FK ke Customer (hanya valid jika partyType = CUSTOMER)
-  customer Customer? @relation(fields: [partyId], references: [id], map: "deposit_customer_fk")
   // FK ke Vendor (hanya valid jika partyType = VENDOR)
   vendor   Vendor?   @relation(fields: [partyId], references: [id], map: "deposit_vendor_fk")
 
