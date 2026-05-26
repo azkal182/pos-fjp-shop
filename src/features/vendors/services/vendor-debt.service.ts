@@ -150,13 +150,14 @@ export async function allocatePaymentFifo(
       remaining -= allocatedAmount
     }
 
-    // LedgerEntry: PAYMENT_OUT CREDIT (toko bayar ke vendor)
+    // LedgerEntry: PAYMENT_OUT CREDIT hanya untuk bagian yang melunasi hutang
+    // Jika overpay, bagian kelebihan dicatat terpisah sebagai DEPOSIT_IN
     await addEntry({
       partyType: "VENDOR",
       partyId: vendorId,
       type: "PAYMENT_OUT",
       direction: "CREDIT",
-      amount: totalPayment,
+      amount: effectivePayment,  // hanya bagian yang melunasi hutang
       description: "Bayar hutang vendor (FIFO)",
       paymentMethod,
       referenceType: "VENDOR_PAYMENT",
@@ -165,21 +166,9 @@ export async function allocatePaymentFifo(
       createdBy,
     }, tx)
 
-    // Jika overpay → otomatis jadi deposit vendor
+    // Jika overpay → kelebihan jadi deposit vendor (DEPOSIT_IN DEBIT)
+    // DEBIT karena deposit adalah "piutang toko ke vendor" — mengurangi kredit
     if (overpayAmount > 0) {
-      await addEntry({
-        partyType: "VENDOR",
-        partyId: vendorId,
-        type: "DEPOSIT_IN",
-        direction: "CREDIT",
-        amount: overpayAmount,
-        description: `Deposit dari kelebihan bayar hutang`,
-        referenceType: "VENDOR_PAYMENT",
-        referenceId: vendorPayment.id,
-        notes,
-        createdBy,
-      }, tx)
-
       await tx.deposit.create({
         data: {
           partyType: "VENDOR",
@@ -258,7 +247,7 @@ export async function allocatePaymentToInvoice(
       partyId: debt.vendorId,
       type: "PAYMENT_OUT",
       direction: "CREDIT",
-      amount,
+      amount: effectiveAmount,  // hanya bagian yang melunasi hutang
       description: `Bayar hutang PO ${debt.purchase.code}`,
       paymentMethod,
       referenceType: "VENDOR_PAYMENT",
@@ -267,21 +256,8 @@ export async function allocatePaymentToInvoice(
       createdBy,
     }, tx)
 
-    // Jika overpay → otomatis jadi deposit vendor
+    // Jika overpay → kelebihan jadi deposit vendor (tanpa ledger entry tambahan)
     if (overpayAmount > 0) {
-      await addEntry({
-        partyType: "VENDOR",
-        partyId: debt.vendorId,
-        type: "DEPOSIT_IN",
-        direction: "CREDIT",
-        amount: overpayAmount,
-        description: `Deposit dari kelebihan bayar PO ${debt.purchase.code}`,
-        referenceType: "VENDOR_PAYMENT",
-        referenceId: vendorPayment.id,
-        notes,
-        createdBy,
-      }, tx)
-
       await tx.deposit.create({
         data: {
           partyType: "VENDOR",
