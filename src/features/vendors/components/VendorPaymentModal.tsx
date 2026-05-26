@@ -55,7 +55,8 @@ export function VendorPaymentModal({
   const amount = parseFloat(rawAmount) || 0
   const debouncedAmount = useDebounce(amount, 400)
   const limit = mode === "invoice" ? (maxAmount ?? 0) : totalOutstanding
-  const isOverLimit = amount > limit && limit > 0
+  // Overpay: bayar lebih dari hutang → kelebihan jadi deposit
+  const overpayAmount = limit > 0 && amount > limit ? amount - limit : 0
 
   // Reset saat modal dibuka
   useEffect(() => {
@@ -114,7 +115,7 @@ export function VendorPaymentModal({
     }
   }
 
-  const canSubmit = amount > 0 && !isOverLimit && !isSubmitting
+  const canSubmit = amount > 0 && !isSubmitting
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -169,16 +170,16 @@ export function VendorPaymentModal({
                 placeholder="0"
                 value={rawAmount}
                 onChange={(e) => setRawAmount(e.target.value)}
-                className={`pl-9 text-xl font-bold h-12 ${isOverLimit ? "border-destructive focus-visible:ring-destructive" : ""}`}
+                className={`pl-9 text-xl font-bold h-12 ${overpayAmount > 0 ? "border-blue-400 dark:border-blue-600" : ""}`}
               />
             </div>
-            {isOverLimit && (
-              <p className="text-xs text-destructive">
-                Nominal melebihi hutang. Maksimal{" "}
-                <CurrencyDisplay amount={limit} className="text-xs font-semibold" />
-              </p>
-            )}
-          </div>
+            {overpayAmount > 0 && (
+              <div className="flex items-center gap-2 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 px-3 py-2 text-xs">
+                <span className="text-blue-700 dark:text-blue-400 font-medium">
+                  Kelebihan <CurrencyDisplay amount={overpayAmount} className="text-xs font-semibold" /> otomatis jadi deposit vendor
+                </span>
+              </div>
+            )}          </div>
 
           {/* Metode bayar */}
           <div className="space-y-1.5">

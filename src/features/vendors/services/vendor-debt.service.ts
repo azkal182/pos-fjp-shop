@@ -85,6 +85,7 @@ export async function previewFifoAllocation(vendorId: string, totalPayment: numb
 }
 
 // Bayar hutang vendor — FIFO
+// Jika amount > totalOutstanding, kelebihan otomatis jadi deposit vendor
 export async function allocatePaymentFifo(
   vendorId: string,
   totalPayment: number,
@@ -96,9 +97,8 @@ export async function allocatePaymentFifo(
   if (debts.length === 0) throw new ConflictError("Vendor tidak memiliki hutang outstanding")
 
   const totalOutstanding = await getTotalVendorOutstanding(vendorId)
-  if (totalPayment > totalOutstanding) {
-    throw new ValidationError(`Nominal melebihi total hutang. Maksimal: Rp ${totalOutstanding.toLocaleString("id-ID")}`)
-  }
+  const overpayAmount = Math.max(0, totalPayment - totalOutstanding)
+  const effectivePayment = Math.min(totalPayment, totalOutstanding)
 
   return globalPrisma.$transaction(async (tx) => {
     // Buat VendorPayment header
@@ -112,7 +112,7 @@ export async function allocatePaymentFifo(
       },
     })
 
-    let remaining = totalPayment
+    let remaining = effectivePayment
 
     for (const debt of debts) {
       if (remaining <= 0) break
@@ -165,11 +165,42 @@ export async function allocatePaymentFifo(
       createdBy,
     }, tx)
 
-    return vendorPayment
+    // Jika overpay → otomatis jadi deposit vendor
+    if (overpayAmount > 0) {
+      await addEntry({
+        partyType: "VENDOR",
+        partyId: vendorId,
+        type: "DEPOSIT_IN",
+        direction: "CREDIT",
+        amount: overpayAmount,
+        description: `Deposit dari kelebihan bayar hutang`,
+        referenceType: "VENDOR_PAYMENT",
+        referenceId: vendorPayment.id,
+        notes,
+        createdBy,
+      }, tx)
+
+      await tx.deposit.create({
+        data: {
+          partyType: "VENDOR",
+          partyId: vendorId,
+          amount: overpayAmount,
+          balance: overpayAmount,
+          source: "MANUAL",
+          sourceId: vendorPayment.id,
+          notes: `Kelebihan bayar hutang vendor`,
+        },
+      })
+
+      log.info("[VENDOR_DEBT]", "Overpay → vendor deposit created", { overpayAmount })
+    }
+
+    return { ...vendorPayment, overpayAmount }
   })
 }
 
 // Bayar hutang vendor — per invoice spesifik
+// Jika amount > remainingAmount, kelebihan otomatis jadi deposit vendor
 export async function allocatePaymentToInvoice(
   vendorDebtId: string,
   amount: number,
@@ -184,11 +215,9 @@ export async function allocatePaymentToInvoice(
   if (!debt) throw new NotFoundError("Hutang vendor")
   if (debt.status === "PAID") throw new ConflictError("Hutang ini sudah lunas")
 
-  if (amount > Number(debt.remainingAmount)) {
-    throw new ValidationError(
-      `Nominal melebihi sisa hutang. Maksimal: Rp ${Number(debt.remainingAmount).toLocaleString("id-ID")}`
-    )
-  }
+  const remaining = Number(debt.remainingAmount)
+  const overpayAmount = Math.max(0, amount - remaining)
+  const effectiveAmount = Math.min(amount, remaining)
 
   return globalPrisma.$transaction(async (tx) => {
     const vendorPayment = await tx.vendorPayment.create({
@@ -204,21 +233,21 @@ export async function allocatePaymentToInvoice(
     await tx.vendorDebtPayment.create({
       data: {
         debtId: vendorDebtId,
-        amount,
+        amount: effectiveAmount,
         source: "DIRECT",
         notes: notes ?? null,
         vendorPaymentId: vendorPayment.id,
       },
     })
 
-    const newRemaining = Number(debt.remainingAmount) - amount
+    const newRemaining = remaining - effectiveAmount
     const willBeFullyPaid = newRemaining <= 0
 
     await tx.vendorDebt.update({
       where: { id: vendorDebtId },
       data: {
-        paidAmount: { increment: amount },
-        remainingAmount: { decrement: amount },
+        paidAmount: { increment: effectiveAmount },
+        remainingAmount: { decrement: effectiveAmount },
         status: willBeFullyPaid ? "PAID" : "PARTIAL",
         settledAt: willBeFullyPaid ? new Date() : null,
       },
@@ -238,13 +267,45 @@ export async function allocatePaymentToInvoice(
       createdBy,
     }, tx)
 
+    // Jika overpay → otomatis jadi deposit vendor
+    if (overpayAmount > 0) {
+      await addEntry({
+        partyType: "VENDOR",
+        partyId: debt.vendorId,
+        type: "DEPOSIT_IN",
+        direction: "CREDIT",
+        amount: overpayAmount,
+        description: `Deposit dari kelebihan bayar PO ${debt.purchase.code}`,
+        referenceType: "VENDOR_PAYMENT",
+        referenceId: vendorPayment.id,
+        notes,
+        createdBy,
+      }, tx)
+
+      await tx.deposit.create({
+        data: {
+          partyType: "VENDOR",
+          partyId: debt.vendorId,
+          amount: overpayAmount,
+          balance: overpayAmount,
+          source: "MANUAL",
+          sourceId: vendorPayment.id,
+          notes: `Kelebihan bayar PO ${debt.purchase.code}`,
+        },
+      })
+
+      log.info("[VENDOR_DEBT]", "Invoice overpay → vendor deposit created", { overpayAmount })
+    }
+
     log.info("[VENDOR_DEBT]", "Invoice payment processed", {
       vendorDebtId,
       purchaseCode: debt.purchase.code,
       amount,
+      effectiveAmount,
+      overpayAmount,
       willBeFullyPaid,
     })
 
-    return vendorPayment
+    return { ...vendorPayment, overpayAmount }
   })
 }
