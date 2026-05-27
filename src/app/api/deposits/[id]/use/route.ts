@@ -10,6 +10,8 @@ const schema = z.object({
   amount: z.number().min(1),
   referenceType: z.string().min(1),
   referenceId: z.string().min(1),
+  partyType: z.enum(["CUSTOMER", "VENDOR"]),
+  partyId: z.string().min(1),
 })
 
 export const POST = withHandler(async (req: NextRequest, ctx) => {
@@ -19,6 +21,13 @@ export const POST = withHandler(async (req: NextRequest, ctx) => {
   const parsed = schema.safeParse(body)
   if (!parsed.success) throw new ValidationError(parsed.error.issues[0].message)
 
-  const result = await useDeposit(id, parsed.data.amount, parsed.data.referenceType, parsed.data.referenceId, session!.user.id)
+  const result = await useDeposit(
+    id,
+    parsed.data.amount,
+    parsed.data.referenceType,
+    parsed.data.referenceId,
+    session!.user.id,
+    { partyType: parsed.data.partyType, partyId: parsed.data.partyId }
+  )
   return successResponse(result)
 })

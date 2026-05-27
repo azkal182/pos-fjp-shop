@@ -4,7 +4,7 @@ import { successResponse } from "@/lib/api-response"
 import { NotFoundError, ValidationError } from "@/lib/exceptions"
 import { prisma } from "@/lib/prisma"
 import { updateVendorSchema } from "@/features/vendors/schemas"
-import { updateVendor } from "@/features/vendors/services/vendor.service"
+import { softDeleteVendor, updateVendor } from "@/features/vendors/services/vendor.service"
 
 export const GET = withHandler(async (_req: NextRequest, ctx) => {
   const { id } = await ctx.params!
@@ -25,4 +25,10 @@ export const PUT = withHandler(async (req: NextRequest, ctx) => {
   if (!parsed.success) throw new ValidationError(parsed.error.issues[0].message)
   const vendor = await updateVendor(id, parsed.data)
   return successResponse(vendor)
+})
+
+export const DELETE = withHandler(async (_req: NextRequest, ctx) => {
+  const { id } = await ctx.params!
+  await softDeleteVendor(id)
+  return successResponse({ message: "Vendor berhasil dinonaktifkan" })
 })

@@ -6,7 +6,6 @@ import { calculatePagination } from "@/lib/api-response"
 import { createMovement } from "@/features/stock-movements/services/stock-movement.service"
 import { updateAfterPurchase } from "@/features/products/services/product-vendor-price.service"
 import { addEntry } from "@/features/ledger/services/ledger.service"
-import { createDeposit } from "@/features/deposits/services/deposit.service"
 import type { CreatePurchaseInput, PriceChange } from "../schemas/purchase.schema"
 
 export interface PurchaseFilter {
@@ -113,6 +112,7 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
   // paidAmount > 0      = bayar sebagian atau lunas
   const paidAmount = data.paidAmount ?? 0  // undefined → 0 (hutang semua)
   const paymentMethod = data.paymentMethod ?? "CASH"
+  const paymentForInvoice = Math.min(paidAmount, totalAmount)
   const debtAmount = Math.max(0, totalAmount - paidAmount)
   const overpayAmount = Math.max(0, paidAmount - totalAmount)
   const paymentStatus = paidAmount >= totalAmount ? "PAID" : paidAmount > 0 ? "PARTIAL" : "UNPAID"
@@ -237,7 +237,7 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
         partyId: data.vendorId,
         type: "PAYMENT_OUT",
         direction: "CREDIT",
-        amount: paidAmount,
+        amount: paymentForInvoice,
         description: `Bayar PO ${code}`,
         paymentMethod,
         referenceType: "PURCHASE",
@@ -248,7 +248,7 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
 
       log.debug("[PURCHASE]", "Ledger PAYMENT_OUT entry created", {
         direction: "CREDIT",
-        amount: paidAmount,
+        amount: paymentForInvoice,
         paymentMethod,
       })
     } else {

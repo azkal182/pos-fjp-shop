@@ -132,11 +132,15 @@ export async function confirmTransaction(
     notes, items: updatedItems, discountAmount: updatedDiscount,
   } = payload
 
+  const originalQtyByProduct = existing.items.reduce<Record<string, number>>((acc, item) => {
+    acc[item.productId] = (acc[item.productId] ?? 0) + item.quantity
+    return acc
+  }, {})
+
   // Gunakan items yang diupdate jika ada, atau items lama
   const finalItems = updatedItems
     ? updatedItems.map((ui) => {
-        const orig = existing.items.find((i) => i.productId === ui.productId)
-        return { ...ui, originalQty: orig?.quantity ?? 0 }
+        return { ...ui, originalQty: originalQtyByProduct[ui.productId] ?? 0 }
       })
     : existing.items.map((i) => ({
         productId: i.productId,
@@ -169,12 +173,23 @@ export async function confirmTransaction(
     (sum, item) => sum + (item.sellPrice - item.discountAmount) * item.quantity,
     0
   )
+  const customerId = existing.customerId
+
+  if (depositUsed > 0 && !customerId) {
+    throw new ValidationError("Deposit hanya bisa digunakan untuk transaksi customer terdaftar")
+  }
+  if (depositUsed > 0 && !depositId) {
+    throw new ValidationError("depositId wajib diisi saat menggunakan deposit")
+  }
+  if (depositId && depositUsed <= 0) {
+    throw new ValidationError("depositUsed harus lebih dari 0 jika depositId diisi")
+  }
+
   const totalAmount = subtotal - finalDiscount + packingFee
   const effectivePaid = paidAmount + depositUsed
   const debtAmount = Math.max(0, totalAmount - effectivePaid)
   const overpayAmount = Math.max(0, effectivePaid - totalAmount)
   const paymentStatus = effectivePaid >= totalAmount ? "PAID" : effectivePaid > 0 ? "PARTIAL" : "UNPAID"
-  const customerId = existing.customerId
 
   // Validasi walk-in tidak boleh hutang
   if (!customerId && debtAmount > 0) {
@@ -206,7 +221,7 @@ export async function confirmTransaction(
 
   const transaction = await prisma.$transaction(async (tx) => {
     // 1. Update Transaction
-    const trx = await tx.transaction.update({
+    await tx.transaction.update({
       where: { id: transactionId },
       data: {
         subtotal,
@@ -256,7 +271,6 @@ export async function confirmTransaction(
       await tx.product.update({
         where: { id: item.productId },
         data: {
-          stock: { decrement: item.quantity },
           reservedStock: { decrement: item.originalQty },  // lepas reserve lama
         },
       })
@@ -298,19 +312,6 @@ export async function confirmTransaction(
         }, tx)
       }
 
-      if (depositUsed > 0) {
-        await addEntry({
-          partyType: "CUSTOMER",
-          partyId: customerId,
-          type: "DEPOSIT_OUT",
-          direction: "DEBIT",
-          amount: depositUsed,
-          description: `Deposit dipakai untuk ${existing.code}`,
-          referenceType: "TRANSACTION",
-          referenceId: transactionId,
-          createdBy: userId,
-        }, tx)
-      }
     }
 
     // 5. Buat Debt jika ada
@@ -361,7 +362,15 @@ export async function confirmTransaction(
 
     // 8. Pakai deposit jika ada
     if (depositUsed > 0 && depositId && customerId) {
-      await useDeposit(depositId, depositUsed, "TRANSACTION", transactionId, userId, tx)
+      await useDeposit(
+        depositId,
+        depositUsed,
+        "TRANSACTION",
+        transactionId,
+        userId,
+        { partyType: "CUSTOMER", partyId: customerId },
+        tx
+      )
     }
 
     log.info("[POS]", "Transaction confirmed", {

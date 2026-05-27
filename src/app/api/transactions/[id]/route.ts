@@ -23,12 +23,21 @@ const updateDraftItemSchema = z.object({
 const updateDraftSchema = z.object({
   items: z.array(updateDraftItemSchema).min(1, "Minimal 1 item"),
   discountAmount: z.coerce.number().min(0).default(0),
+}).superRefine((data, ctx) => {
+  const isDuplicate = new Set(data.items.map((item) => item.productId)).size !== data.items.length
+  if (isDuplicate) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      path: ["items"],
+      message: "Produk duplikat dalam item transaksi tidak diperbolehkan",
+    })
+  }
 })
 
 // PATCH /api/transactions/:id — update items draft (sebelum konfirmasi)
 export const PATCH = withHandler(async (req: NextRequest, ctx) => {
   const session = await auth.api.getSession({ headers: req.headers })
-  const userId = session!.user.id
+  void session
 
   const { id } = await ctx.params!
   const body = await req.json()

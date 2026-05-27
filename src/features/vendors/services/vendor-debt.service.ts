@@ -1,10 +1,8 @@
-import type { PrismaClient } from "@/generated/prisma"
 import { prisma as globalPrisma } from "@/lib/prisma"
-import { ConflictError, NotFoundError, ValidationError } from "@/lib/exceptions"
+import { ConflictError, NotFoundError } from "@/lib/exceptions"
 import { addEntry } from "@/features/ledger/services/ledger.service"
+import { createDeposit } from "@/features/deposits/services/deposit.service"
 import { log } from "@/lib/logger"
-
-type TxClient = Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends">
 
 export async function getVendorOutstandingDebts(vendorId: string) {
   return globalPrisma.vendorDebt.findMany({
@@ -166,20 +164,18 @@ export async function allocatePaymentFifo(
       createdBy,
     }, tx)
 
-    // Jika overpay → kelebihan jadi deposit vendor (DEPOSIT_IN DEBIT)
-    // DEBIT karena deposit adalah "piutang toko ke vendor" — mengurangi kredit
+    // Jika overpay → kelebihan jadi deposit vendor + ledger DEPOSIT_IN
     if (overpayAmount > 0) {
-      await tx.deposit.create({
-        data: {
-          partyType: "VENDOR",
-          partyId: vendorId,
-          amount: overpayAmount,
-          balance: overpayAmount,
-          source: "MANUAL",
-          sourceId: vendorPayment.id,
-          notes: `Kelebihan bayar hutang vendor`,
-        },
-      })
+      await createDeposit(
+        "VENDOR",
+        vendorId,
+        overpayAmount,
+        "MANUAL",
+        vendorPayment.id,
+        createdBy,
+        "Kelebihan bayar hutang vendor",
+        tx
+      )
 
       log.info("[VENDOR_DEBT]", "Overpay → vendor deposit created", { overpayAmount })
     }
@@ -256,19 +252,18 @@ export async function allocatePaymentToInvoice(
       createdBy,
     }, tx)
 
-    // Jika overpay → kelebihan jadi deposit vendor (tanpa ledger entry tambahan)
+    // Jika overpay → kelebihan jadi deposit vendor + ledger DEPOSIT_IN
     if (overpayAmount > 0) {
-      await tx.deposit.create({
-        data: {
-          partyType: "VENDOR",
-          partyId: debt.vendorId,
-          amount: overpayAmount,
-          balance: overpayAmount,
-          source: "MANUAL",
-          sourceId: vendorPayment.id,
-          notes: `Kelebihan bayar PO ${debt.purchase.code}`,
-        },
-      })
+      await createDeposit(
+        "VENDOR",
+        debt.vendorId,
+        overpayAmount,
+        "MANUAL",
+        vendorPayment.id,
+        createdBy,
+        `Kelebihan bayar PO ${debt.purchase.code}`,
+        tx
+      )
 
       log.info("[VENDOR_DEBT]", "Invoice overpay → vendor deposit created", { overpayAmount })
     }

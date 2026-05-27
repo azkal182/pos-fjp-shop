@@ -62,9 +62,17 @@ export async function useDeposit(
   referenceType: string,
   referenceId: string,
   createdBy: string,
+  expectedParty?: { partyType: PartyType; partyId: string },
   db: TxClient = globalPrisma
 ) {
   const deposit = await db.deposit.findUniqueOrThrow({ where: { id: depositId } })
+
+  if (
+    expectedParty &&
+    (deposit.partyType !== expectedParty.partyType || deposit.partyId !== expectedParty.partyId)
+  ) {
+    throw new ValidationError("Deposit tidak sesuai dengan pihak transaksi")
+  }
 
   if (amount > Number(deposit.balance)) {
     throw new ValidationError(`Saldo deposit tidak cukup. Tersedia: Rp ${Number(deposit.balance).toLocaleString("id-ID")}`)
@@ -108,39 +116,41 @@ export async function returnDeposit(
   createdBy: string,
   notes?: string
 ) {
-  const deposit = await globalPrisma.deposit.findUniqueOrThrow({ where: { id: depositId } })
+  await globalPrisma.$transaction(async (tx) => {
+    const deposit = await tx.deposit.findUniqueOrThrow({ where: { id: depositId } })
 
-  if (amount > Number(deposit.balance)) {
-    throw new ValidationError(`Saldo deposit tidak cukup. Tersedia: Rp ${Number(deposit.balance).toLocaleString("id-ID")}`)
-  }
+    if (amount > Number(deposit.balance)) {
+      throw new ValidationError(`Saldo deposit tidak cukup. Tersedia: Rp ${Number(deposit.balance).toLocaleString("id-ID")}`)
+    }
 
-  const newBalance = Number(deposit.balance) - amount
+    const newBalance = Number(deposit.balance) - amount
 
-  await globalPrisma.deposit.update({
-    where: { id: depositId },
-    data: {
-      returnedAmount: { increment: amount },
-      balance: newBalance,
-    },
-  })
+    await tx.deposit.update({
+      where: { id: depositId },
+      data: {
+        returnedAmount: { increment: amount },
+        balance: newBalance,
+      },
+    })
 
-  await globalPrisma.depositUsage.create({
-    data: { depositId, amount, usageType: "RETURN", notes },
-  })
+    await tx.depositUsage.create({
+      data: { depositId, amount, usageType: "RETURN", notes },
+    })
 
-  // LedgerEntry: DEPOSIT_RETURN CREDIT (deposit dikembalikan tunai)
-  await addEntry({
-    partyType: deposit.partyType as PartyType,
-    partyId: deposit.partyId,
-    type: "DEPOSIT_RETURN",
-    direction: "CREDIT",
-    amount,
-    description: `Deposit dikembalikan (${paymentMethod === "CASH" ? "tunai" : "transfer"})`,
-    paymentMethod,
-    referenceType: "DEPOSIT",
-    referenceId: depositId,
-    notes,
-    createdBy,
+    // LedgerEntry: DEPOSIT_RETURN DEBIT (membalik efek DEPOSIT_IN)
+    await addEntry({
+      partyType: deposit.partyType as PartyType,
+      partyId: deposit.partyId,
+      type: "DEPOSIT_RETURN",
+      direction: "DEBIT",
+      amount,
+      description: `Deposit dikembalikan (${paymentMethod === "CASH" ? "tunai" : "transfer"})`,
+      paymentMethod,
+      referenceType: "DEPOSIT",
+      referenceId: depositId,
+      notes,
+      createdBy,
+    }, tx)
   })
 
   log.info("[DEPOSIT]", "Deposit returned", { depositId, amount, paymentMethod })

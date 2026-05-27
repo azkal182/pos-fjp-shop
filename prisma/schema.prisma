@@ -133,7 +133,6 @@ model Vendor {
   vendorDebts    VendorDebt[]
   vendorPayments VendorPayment[]
   productPrices  ProductVendorPrice[]
-  deposits       Deposit[]
 
   @@map("vendors")
 }
@@ -533,8 +532,6 @@ model Deposit {
   createdAt      DateTime      @default(now())
 
   usages   DepositUsage[]
-  // FK ke Vendor (hanya valid jika partyType = VENDOR)
-  vendor   Vendor?   @relation(fields: [partyId], references: [id], map: "deposit_vendor_fk")
 
   @@index([partyType, partyId])
   @@map("deposits")
@@ -603,4 +600,3 @@ model LedgerEntry {
   @@index([accountId, createdAt])
   @@map("ledger_entries")
 }
-

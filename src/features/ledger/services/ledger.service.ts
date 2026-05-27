@@ -6,6 +6,28 @@ type TxClient = Omit<PrismaClient, "$connect" | "$disconnect" | "$on" | "$transa
 
 export type PartyType = "CUSTOMER" | "VENDOR"
 
+async function recalculateAccountRunningBalance(db: TxClient, accountId: string) {
+  const entries = await db.ledgerEntry.findMany({
+    where: { accountId },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+  })
+
+  let runningBalance = 0
+  for (const entry of entries) {
+    runningBalance =
+      entry.direction === "DEBIT"
+        ? runningBalance + Number(entry.amount)
+        : runningBalance - Number(entry.amount)
+
+    if (Number(entry.runningBalance) !== runningBalance) {
+      await db.ledgerEntry.update({
+        where: { id: entry.id },
+        data: { runningBalance },
+      })
+    }
+  }
+}
+
 // ─── Account ──────────────────────────────────────────────────────────────────
 
 export async function getOrCreateAccount(partyType: PartyType, partyId: string, db: TxClient = globalPrisma) {
@@ -77,6 +99,9 @@ export async function addEntry(params: AddEntryParams, db: TxClient = globalPris
       createdAt: params.createdAt ?? new Date(),
     },
   })
+
+  // Pastikan running balance konsisten walau entry baru disisipkan dengan createdAt lampau.
+  await recalculateAccountRunningBalance(db, account.id)
 
   log.info("[LEDGER]", "Entry added", {
     partyType: params.partyType,
@@ -153,34 +178,22 @@ export async function recalculateLedger(partyType: PartyType, partyId: string) {
   })
   if (!account) return { fixed: 0 }
 
-  // Ambil semua entry diurutkan by createdAt asc, id asc (deterministik)
-  const entries = await globalPrisma.ledgerEntry.findMany({
+  const before = await globalPrisma.ledgerEntry.findMany({
     where: { accountId: account.id },
     orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, runningBalance: true },
   })
+  await recalculateAccountRunningBalance(globalPrisma, account.id)
+  const after = await globalPrisma.ledgerEntry.findMany({
+    where: { accountId: account.id },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    select: { id: true, runningBalance: true },
+  })
+  const beforeMap = new Map(before.map((e) => [e.id, Number(e.runningBalance)]))
+  const fixed = after.filter((e) => beforeMap.get(e.id) !== Number(e.runningBalance)).length
 
-  let runningBalance = 0
-  let fixed = 0
-
-  for (const entry of entries) {
-    const newBalance =
-      entry.direction === "DEBIT"
-        ? runningBalance + Number(entry.amount)
-        : runningBalance - Number(entry.amount)
-
-    if (Number(entry.runningBalance) !== newBalance) {
-      await globalPrisma.ledgerEntry.update({
-        where: { id: entry.id },
-        data: { runningBalance: newBalance },
-      })
-      fixed++
-    }
-
-    runningBalance = newBalance
-  }
-
-  log.info("[LEDGER]", "Recalculate done", { partyType, partyId, totalEntries: entries.length, fixed })
-  return { fixed, totalEntries: entries.length }
+  log.info("[LEDGER]", "Recalculate done", { partyType, partyId, totalEntries: after.length, fixed })
+  return { fixed, totalEntries: after.length }
 }
 
 
