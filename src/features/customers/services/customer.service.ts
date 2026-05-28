@@ -58,7 +58,7 @@ export async function getCustomerById(id: string) {
     where: { id },
     include: {
       transactions: {
-        orderBy: { transactionDate: "desc" },
+        orderBy: [{ createdAt: "desc" }, { id: "desc" }],
         take: 5,
         select: {
           id: true,
@@ -71,7 +71,7 @@ export async function getCustomerById(id: string) {
       },
       debts: {
         where: { status: { in: ["UNPAID", "PARTIAL"] } },
-        orderBy: { debtDate: "asc" },
+        orderBy: [{ createdAt: "asc" }, { id: "asc" }],
         select: {
           id: true,
           originalAmount: true,
@@ -112,7 +112,7 @@ export async function softDeleteCustomer(id: string) {
 export async function getCustomerDebtSummary(customerId: string) {
   const debts = await prisma.debt.findMany({
     where: { customerId, status: { in: ["UNPAID", "PARTIAL"] } },
-    orderBy: { debtDate: "asc" },
+    orderBy: [{ createdAt: "asc" }, { id: "asc" }],
     select: {
       id: true,
       originalAmount: true,

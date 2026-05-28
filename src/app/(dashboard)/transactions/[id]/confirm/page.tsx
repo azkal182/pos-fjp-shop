@@ -204,7 +204,6 @@ export default function ConfirmTransactionPage() {
   const [packingFee, setPackingFee] = useState(0)
   const [overpayAction, setOverpayAction] = useState<"return" | "deposit">("return")
   const [depositInfo, setDepositInfo] = useState<DepositInfo | null>(null)
-  const [useDepositChecked, setUseDepositChecked] = useState(false)
 
   // Dialog konfirmasi sebelum submit
   const [showConfirmDialog, setShowConfirmDialog] = useState(false)
@@ -246,7 +245,7 @@ export default function ConfirmTransactionPage() {
   )
   const totalAmount = subtotal - discount + packingFee
   const paid = paidAmount === "" ? 0 : paidAmount
-  const depositUsed = useDepositChecked && depositInfo
+  const depositUsed = depositInfo
     ? Math.min(depositInfo.totalBalance, Math.max(0, totalAmount - paid))
     : 0
   const effectivePaid = paid + depositUsed
@@ -254,11 +253,14 @@ export default function ConfirmTransactionPage() {
   const overpayAmount = Math.max(0, effectivePaid - totalAmount)
   const isFullPay = effectivePaid >= totalAmount && overpayAmount === 0
   const isWalkIn = !transaction.customerId
-  const isAllDebt = paidAmount === "" && !isWalkIn
+  const isAllDebt = paidAmount === "" && !isWalkIn && depositUsed <= 0
+  const cashLabel = paidAmount === "" ? 0 : paid
   const suggests = generateSuggests(totalAmount)
 
   const canConfirm = !isSubmitting && editItems.length > 0 && (
-    isAllDebt || (paid > 0 && !(isWalkIn && debtAmount > 0))
+    isWalkIn
+      ? debtAmount <= 0 // walk-in wajib lunas (termasuk jika lunas via nominal bayar)
+      : (isAllDebt || effectivePaid > 0) // customer boleh hutang, atau terbayar oleh tunai/deposit
   )
 
   function updateQty(idx: number, qty: number) {
@@ -347,7 +349,7 @@ export default function ConfirmTransactionPage() {
           packingFee,
           overpayAction,
           depositUsed,
-          depositId: useDepositChecked && firstDeposit ? firstDeposit.id : undefined,
+          depositId: firstDeposit ? firstDeposit.id : undefined,
           items: editItems.map((i) => ({
             productId: i.productId,
             quantity: i.quantity,
@@ -622,16 +624,8 @@ export default function ConfirmTransactionPage() {
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">Deposit Tersedia</p>
                   <CurrencyDisplay amount={depositInfo.totalBalance} className="text-sm font-bold text-blue-700 dark:text-blue-400" />
+                  <p className="text-[11px] text-blue-700/80 dark:text-blue-300/80">Otomatis dipakai terlebih dulu</p>
                 </div>
-                <label className="flex items-center gap-1.5 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={useDepositChecked}
-                    onChange={(e) => setUseDepositChecked(e.target.checked)}
-                    className="rounded"
-                  />
-                  <span className="text-xs">Gunakan</span>
-                </label>
               </div>
             )}
 
@@ -657,7 +651,11 @@ export default function ConfirmTransactionPage() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
                 <Label className="text-xs">Nominal Bayar</Label>
-                {!isWalkIn && <span className="text-xs text-muted-foreground">Kosong = hutang semua</span>}
+                {!isWalkIn && (
+                  <span className="text-xs text-muted-foreground">
+                    Kosong = tanpa tunai {depositUsed > 0 ? "(deposit tetap dipakai)" : "(jadi hutang jika tanpa deposit)"}
+                  </span>
+                )}
               </div>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
@@ -665,7 +663,7 @@ export default function ConfirmTransactionPage() {
                   ref={paidInputRef}
                   type="number"
                   min={0}
-                  placeholder={isWalkIn ? "Wajib diisi" : "0 = hutang semua"}
+                  placeholder={isWalkIn ? "Wajib diisi" : "Kosong/0 = tanpa tunai"}
                   value={paidAmount === "" ? "" : paidAmount}
                   onChange={(e) => setPaidAmount(e.target.value === "" ? "" : parseFloat(e.target.value) || 0)}
                   onFocus={(e) => e.target.select()}
@@ -724,6 +722,18 @@ export default function ConfirmTransactionPage() {
                       Semua jadi hutang
                     </span>
                     <CurrencyDisplay amount={totalAmount} className="text-sm font-bold text-orange-700 dark:text-orange-400" />
+                  </div>
+                )}
+                {!isAllDebt && depositUsed > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-blue-700 dark:text-blue-400 font-medium">Dipakai dari deposit</span>
+                    <CurrencyDisplay amount={depositUsed} className="text-sm font-bold text-blue-700 dark:text-blue-400" />
+                  </div>
+                )}
+                {!isAllDebt && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-foreground/80">Tunai/Transfer</span>
+                    <CurrencyDisplay amount={cashLabel} className="text-sm font-semibold" />
                   </div>
                 )}
                 {!isAllDebt && debtAmount > 0 && (
@@ -883,7 +893,7 @@ export default function ConfirmTransactionPage() {
                 <>
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">Dibayar</span>
-                    <CurrencyDisplay amount={paid} />
+                    <CurrencyDisplay amount={cashLabel} />
                   </div>
                   {depositUsed > 0 && (
                     <div className="flex justify-between text-blue-600">

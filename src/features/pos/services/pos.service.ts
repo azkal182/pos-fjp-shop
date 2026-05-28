@@ -4,7 +4,7 @@ import { generateSequentialCode } from "@/lib/code-generator"
 import { ValidationError, NotFoundError, ConflictError } from "@/lib/exceptions"
 import { createMovement } from "@/features/stock-movements/services/stock-movement.service"
 import { hasOutstandingDebt, allocatePaymentFifo } from "@/features/debts/services/debt.service"
-import { createDeposit, useDeposit } from "@/features/deposits/services/deposit.service"
+import { createDeposit, useDepositFifo } from "@/features/deposits/services/deposit.service"
 import { addEntry } from "@/features/ledger/services/ledger.service"
 import type { CreateDraftInput, ConfirmTransactionInput } from "../schemas/pos.schema"
 
@@ -128,9 +128,10 @@ export async function confirmTransaction(
 
   const {
     paidAmount, paymentMethod, packingFee = 0,
-    overpayAction, depositUsed = 0, depositId,
+    overpayAction,
     notes, items: updatedItems, discountAmount: updatedDiscount,
   } = payload
+  const eventBaseTime = new Date()
 
   const originalQtyByProduct = existing.items.reduce<Record<string, number>>((acc, item) => {
     acc[item.productId] = (acc[item.productId] ?? 0) + item.quantity
@@ -175,18 +176,16 @@ export async function confirmTransaction(
   )
   const customerId = existing.customerId
 
-  if (depositUsed > 0 && !customerId) {
-    throw new ValidationError("Deposit hanya bisa digunakan untuk transaksi customer terdaftar")
-  }
-  if (depositUsed > 0 && !depositId) {
-    throw new ValidationError("depositId wajib diisi saat menggunakan deposit")
-  }
-  if (depositId && depositUsed <= 0) {
-    throw new ValidationError("depositUsed harus lebih dari 0 jika depositId diisi")
-  }
-
   const totalAmount = subtotal - finalDiscount + packingFee
-  const effectivePaid = paidAmount + depositUsed
+  const availableDeposit = customerId
+    ? await prisma.deposit.aggregate({
+      where: { partyType: "CUSTOMER", partyId: customerId, balance: { gt: 0 } },
+      _sum: { balance: true },
+    })
+    : null
+  const autoDepositUsed = customerId ? Math.min(totalAmount, Number(availableDeposit?._sum.balance ?? 0)) : 0
+  const effectivePaid = paidAmount + autoDepositUsed
+  const paymentAppliedToInvoice = Math.min(totalAmount, effectivePaid)
   const debtAmount = Math.max(0, totalAmount - effectivePaid)
   const overpayAmount = Math.max(0, effectivePaid - totalAmount)
   const paymentStatus = effectivePaid >= totalAmount ? "PAID" : effectivePaid > 0 ? "PARTIAL" : "UNPAID"
@@ -205,7 +204,7 @@ export async function confirmTransaction(
     packingFee,
     totalAmount,
     paidAmount,
-    depositUsed,
+    depositUsed: autoDepositUsed,
     effectivePaid,
     debtAmount,
     overpayAmount,
@@ -232,12 +231,13 @@ export async function confirmTransaction(
         paymentMethod,
         paymentStatus,
         confirmationStatus: "CONFIRMED",
-        confirmedAt: new Date(),
+        confirmedAt: eventBaseTime,
         confirmedBy: userId,
+        transactionDate: eventBaseTime,
         notes: notes ?? existing.notes,
         changeAmount: 0,
         debtAmount,
-        depositUsed,
+        depositUsed: autoDepositUsed,
       },
     })
 
@@ -285,6 +285,7 @@ export async function confirmTransaction(
 
     // 4. LedgerEntry untuk customer (jika ada)
     if (customerId) {
+      const invoiceDate = new Date(eventBaseTime.getTime())
       await addEntry({
         partyType: "CUSTOMER",
         partyId: customerId,
@@ -295,20 +296,23 @@ export async function confirmTransaction(
         referenceType: "TRANSACTION",
         referenceId: transactionId,
         createdBy: userId,
+        createdAt: invoiceDate,
       }, tx)
 
-      if (paidAmount > 0) {
+      if (paymentAppliedToInvoice > 0) {
+        const paymentDate = new Date(eventBaseTime.getTime() + 1)
         await addEntry({
           partyType: "CUSTOMER",
           partyId: customerId,
           type: "PAYMENT_IN",
           direction: "CREDIT",
-          amount: paidAmount,
+          amount: paymentAppliedToInvoice,
           description: `Bayar ${existing.code}`,
           paymentMethod,
           referenceType: "TRANSACTION",
           referenceId: transactionId,
           createdBy: userId,
+          createdAt: paymentDate,
         }, tx)
       }
 
@@ -316,13 +320,15 @@ export async function confirmTransaction(
 
     // 5. Buat Debt jika ada
     if (debtAmount > 0 && customerId) {
+      const debtDate = new Date(eventBaseTime.getTime() + 2)
       await tx.debt.create({
         data: {
           customerId,
           transactionId,
           originalAmount: debtAmount,
           remainingAmount: debtAmount,
-          status: effectivePaid === 0 ? "UNPAID" : "PARTIAL",
+          status: effectivePaid <= 0 ? "UNPAID" : "PARTIAL",
+          debtDate,
         },
       })
     }
@@ -360,15 +366,16 @@ export async function confirmTransaction(
       data: { changeAmount: finalChangeAmount, depositCreated },
     })
 
-    // 8. Pakai deposit jika ada
-    if (depositUsed > 0 && depositId && customerId) {
-      await useDeposit(
-        depositId,
-        depositUsed,
+    // 8. Pakai deposit otomatis FIFO jika tersedia
+    if (autoDepositUsed > 0 && customerId) {
+      await useDepositFifo(
+        "CUSTOMER",
+        customerId,
+        autoDepositUsed,
         "TRANSACTION",
         transactionId,
         userId,
-        { partyType: "CUSTOMER", partyId: customerId },
+        { writeLedger: false },
         tx
       )
     }

@@ -36,7 +36,7 @@ export async function getAllTransactions(filter: TransactionFilter = {}) {
     prisma.transaction.findMany({
       where,
       include: { customer: { select: { id: true, name: true } } },
-      orderBy: { transactionDate: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (page - 1) * limit,
       take: limit,
     }),

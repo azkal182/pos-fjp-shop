@@ -41,6 +41,14 @@ interface PurchaseFormProps {
   defaultVendorId?: string
 }
 
+function getLocalDateInputValue() {
+  const now = new Date()
+  const yyyy = now.getFullYear()
+  const mm = String(now.getMonth() + 1).padStart(2, "0")
+  const dd = String(now.getDate()).padStart(2, "0")
+  return `${yyyy}-${mm}-${dd}`
+}
+
 
 
 // ── ProductSearch ─────────────────────────────────────────────────────────────
@@ -412,7 +420,7 @@ export function PurchaseForm({ onSuccess, defaultVendorId }: PurchaseFormProps) 
       resolver: zodResolver(createPurchaseSchema),
       defaultValues: {
         vendorId: defaultVendorId ?? "",
-        purchaseDate: new Date().toISOString().slice(0, 10),
+        purchaseDate: getLocalDateInputValue(),
         items: [],
         notes: "",
         confirmedPriceUpdates: [],
@@ -655,6 +663,7 @@ export function PurchaseForm({ onSuccess, defaultVendorId }: PurchaseFormProps) 
           cart={cart}
           cartTotal={cartTotal}
           paidAmount={pendingData.paidAmount}
+          vendorDeposit={vendorDeposit}
           paymentMethod={pendingData.paymentMethod ?? "CASH"}
           isSubmitting={isSubmitting}
           onConfirm={(receiptImageUrl) => {
@@ -682,11 +691,14 @@ function PaymentPanel({ control, watch, setValue, cartTotal, vendorDeposit, isSu
   const paidAmount = useWatch({ control, name: "paidAmount" })
   const paymentMethod = watch("paymentMethod")
 
-  const paid = paidAmount ?? undefined
-  const debt = paid !== undefined ? Math.max(0, cartTotal - paid) : cartTotal
-  const overpay = paid !== undefined ? Math.max(0, paid - cartTotal) : 0
-  const isFullPay = paid !== undefined && paid >= cartTotal && overpay === 0
-  const isDebt = paid === undefined || paid < cartTotal
+  const cashPaid = paidAmount ?? 0
+  const autoDepositUsed = Math.min(cartTotal, vendorDeposit)
+  const depositRemaining = Math.max(0, vendorDeposit - autoDepositUsed)
+  const effectivePaid = cashPaid + autoDepositUsed
+  const debt = Math.max(0, cartTotal - effectivePaid)
+  const overpay = Math.max(0, effectivePaid - cartTotal)
+  const isFullPay = effectivePaid >= cartTotal && overpay === 0
+  const isDebt = debt > 0
 
   return (
     <div className="rounded-xl border bg-card overflow-hidden">
@@ -709,6 +721,7 @@ function PaymentPanel({ control, watch, setValue, cartTotal, vendorDeposit, isSu
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">Deposit Tersedia</p>
               <CurrencyDisplay amount={vendorDeposit} className="text-sm font-bold text-blue-700 dark:text-blue-400" />
+              <p className="text-[11px] text-blue-700/80 dark:text-blue-300/80">Otomatis dipakai terlebih dulu (FIFO)</p>
             </div>
           </div>
         )}
@@ -732,8 +745,8 @@ function PaymentPanel({ control, watch, setValue, cartTotal, vendorDeposit, isSu
 
         <div className="space-y-1.5">
           <div className="flex items-center justify-between">
-            <Label className="text-xs">Nominal Bayar</Label>
-            <span className="text-xs text-muted-foreground">Kosong = hutang semua</span>
+            <Label className="text-xs">Nominal Bayar Tunai/Transfer</Label>
+            <span className="text-xs text-muted-foreground">Kosong = tanpa tunai</span>
           </div>
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
@@ -758,7 +771,7 @@ function PaymentPanel({ control, watch, setValue, cartTotal, vendorDeposit, isSu
                     : "border-border hover:bg-muted text-muted-foreground"
                 }`}
               >
-                Hutang
+                Tanpa Tunai
               </button>
               <button
                 type="button"
@@ -783,6 +796,24 @@ function PaymentPanel({ control, watch, setValue, cartTotal, vendorDeposit, isSu
               ? "bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-900/50"
               : "bg-orange-50 dark:bg-orange-950/20 border-orange-200 dark:border-orange-900/50"
           }`}>
+            {autoDepositUsed > 0 && (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className="text-blue-700 dark:text-blue-400 font-medium">Dipakai dari deposit</span>
+                  <CurrencyDisplay amount={autoDepositUsed} className="text-sm font-bold text-blue-700 dark:text-blue-400" />
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-blue-700/80 dark:text-blue-300/80">Sisa saldo deposit</span>
+                  <CurrencyDisplay amount={depositRemaining} className="font-semibold text-blue-700/90 dark:text-blue-300/90" />
+                </div>
+              </>
+            )}
+            {cashPaid > 0 && (
+              <div className="flex items-center justify-between">
+                <span className="text-foreground/80">Tunai/Transfer</span>
+                <CurrencyDisplay amount={cashPaid} className="text-sm font-semibold" />
+              </div>
+            )}
             {isDebt && debt > 0 && (
               <div className="flex items-center justify-between">
                 <span className="flex items-center gap-1.5 text-orange-700 dark:text-orange-400 font-medium">

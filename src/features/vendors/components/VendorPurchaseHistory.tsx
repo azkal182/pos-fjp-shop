@@ -89,8 +89,19 @@ export function VendorPurchaseHistory({ vendorId, vendorName = "Vendor", onPayme
       render: (row) => <CurrencyDisplay amount={Number(row.totalAmount)} className="font-semibold" />,
     },
     {
-      header: "Dibayar",
-      render: (row) => <CurrencyDisplay amount={Number(row.paidAmount)} className="text-sm text-green-600" />,
+      header: "Terbayar",
+      render: (row) => {
+        const remaining = Number(row.vendorDebt?.remainingAmount ?? 0)
+        const settled = Math.max(0, Number(row.totalAmount) - remaining)
+        return (
+          <div className="leading-tight">
+            <CurrencyDisplay amount={settled} className="text-sm text-green-600 font-medium" />
+            {Number(row.paidAmount) > 0 && (
+              <p className="text-[10px] text-muted-foreground">Tunai/Transfer: Rp {Number(row.paidAmount).toLocaleString("id-ID")}</p>
+            )}
+          </div>
+        )
+      },
     },
     {
       header: "Sisa Hutang",

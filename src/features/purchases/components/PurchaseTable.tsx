@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select"
 import { DataTable, type Column } from "@/components/shared/DataTable"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
+import { StatusBadge } from "@/components/shared/StatusBadge"
 import { DateRangePicker } from "@/components/shared/DateRangePicker"
 import { Pagination } from "@/components/shared/Pagination"
 import { ReceiptImageDialog } from "./ReceiptImageDialog"
@@ -25,7 +26,11 @@ interface Purchase {
   code: string
   vendor: { id: string; name: string }
   totalAmount: number
+  paidAmount: number
+  debtAmount: number
+  paymentStatus: string
   purchaseDate: string
+  createdAt: string
   receiptImageUrl?: string | null
   _count: { items: number }
 }
@@ -75,11 +80,15 @@ export function PurchaseTable({
     },
     {
       header: "Tanggal",
-      render: (row) => (
-        <span className="text-sm text-muted-foreground">
-          {format(new Date(row.purchaseDate), "dd MMM yyyy", { locale: idLocale })}
-        </span>
-      ),
+      render: (row) => {
+        const businessDate = new Date(row.purchaseDate)
+        const eventTime = new Date(row.createdAt || row.purchaseDate)
+        return (
+          <span className="text-sm text-muted-foreground">
+            {format(businessDate, "dd MMM yyyy", { locale: idLocale })} · {format(eventTime, "HH:mm", { locale: idLocale })}
+          </span>
+        )
+      },
     },
     {
       header: "Jumlah Item",
@@ -90,6 +99,24 @@ export function PurchaseTable({
     {
       header: "Total",
       render: (row) => <CurrencyDisplay amount={Number(row.totalAmount)} className="font-semibold" />,
+    },
+    {
+      header: "Status Pembayaran",
+      render: (row) => {
+        const paid = Number(row.paidAmount)
+        const debt = Number(row.debtAmount)
+        const isPartial = row.paymentStatus === "PARTIAL"
+        return (
+          <div className="space-y-0.5">
+            <StatusBadge status={row.paymentStatus} />
+            {isPartial && (
+              <p className="text-[11px] text-muted-foreground">
+                Terbayar Rp {paid.toLocaleString("id-ID")} · Sisa Rp {debt.toLocaleString("id-ID")}
+              </p>
+            )}
+          </div>
+        )
+      },
     },
     {
       header: "Aksi",

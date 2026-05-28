@@ -10,7 +10,7 @@ import { id as idLocale } from "date-fns/locale"
 
 interface LedgerEntry {
   date: string
-  type: "DEBT" | "PAYMENT"
+  type: "DEBT" | "PAYMENT" | "DEPOSIT_IN" | "DEPOSIT_OUT" | "DEPOSIT_RETURN"
   description: string
   debit: number
   credit: number
@@ -118,13 +118,14 @@ export function CustomerLedger({ customerId, refreshKey }: CustomerLedgerProps) 
           {data.ledger.map((entry) => {
             const isExpanded = expandedId === entry.id
             const hasDetail = entry.type === "PAYMENT" && entry.meta?.allocations?.length
+            const isDebit = entry.debit > 0
 
             return (
               <div key={entry.id}>
                 <div
                   className={`grid grid-cols-[1fr_100px_100px_100px] gap-2 px-4 py-2.5 text-sm items-center ${
                     hasDetail ? "cursor-pointer hover:bg-muted/30" : ""
-                  } ${entry.type === "DEBT" ? "bg-red-50/30 dark:bg-red-950/10" : "bg-green-50/30 dark:bg-green-950/10"}`}
+                  } ${isDebit ? "bg-red-50/30 dark:bg-red-950/10" : "bg-green-50/30 dark:bg-green-950/10"}`}
                   onClick={() => hasDetail && setExpandedId(isExpanded ? null : entry.id)}
                 >
                   <div className="min-w-0">
@@ -134,7 +135,7 @@ export function CustomerLedger({ customerId, refreshKey }: CustomerLedgerProps) 
                           ? <ChevronDown className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                           : <ChevronRight className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       )}
-                      <span className={`font-medium truncate ${entry.type === "DEBT" ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"}`}>
+                      <span className={`font-medium truncate ${isDebit ? "text-red-700 dark:text-red-400" : "text-green-700 dark:text-green-400"}`}>
                         {entry.description}
                       </span>
                     </div>

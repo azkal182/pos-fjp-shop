@@ -14,7 +14,11 @@ interface Purchase {
   code: string
   vendor: { id: string; name: string }
   totalAmount: number
+  paidAmount: number
+  debtAmount: number
+  paymentStatus: string
   purchaseDate: string
+  createdAt: string
   _count: { items: number }
 }
 

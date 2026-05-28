@@ -6,7 +6,13 @@ import { calculatePagination } from "@/lib/api-response"
 import { createMovement } from "@/features/stock-movements/services/stock-movement.service"
 import { updateAfterPurchase } from "@/features/products/services/product-vendor-price.service"
 import { addEntry } from "@/features/ledger/services/ledger.service"
+import { useDepositFifo } from "@/features/deposits/services/deposit.service"
 import type { CreatePurchaseInput, PriceChange } from "../schemas/purchase.schema"
+
+function parseLocalDateOnly(dateStr: string) {
+  const [y, m, d] = dateStr.split("-").map((v) => Number(v))
+  return new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0)
+}
 
 export interface PurchaseFilter {
   vendorId?: string
@@ -37,7 +43,7 @@ export async function getAllPurchases(filter: PurchaseFilter = {}) {
         _count: { select: { items: true } },
         vendorDebt: { select: { id: true, remainingAmount: true, status: true } },
       },
-      orderBy: { purchaseDate: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (page - 1) * limit,
       take: limit,
     }),
@@ -53,6 +59,7 @@ export async function getPurchaseById(id: string) {
     include: {
       vendor: true,
       user: { select: { id: true, name: true, email: true } },
+      vendorDebt: { select: { id: true, remainingAmount: true, status: true } },
       items: {
         include: { product: { select: { id: true, name: true, code: true, unit: true } } },
       },
@@ -101,6 +108,8 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
   }
 
   const code = await generateSequentialCode("PO")
+  const businessDate = parseLocalDateOnly(data.purchaseDate)
+  const eventBaseTime = new Date()
   const totalAmount = data.items.reduce(
     (sum, item) => sum + item.quantity * item.buyPrice,
     0
@@ -112,10 +121,6 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
   // paidAmount > 0      = bayar sebagian atau lunas
   const paidAmount = data.paidAmount ?? 0  // undefined → 0 (hutang semua)
   const paymentMethod = data.paymentMethod ?? "CASH"
-  const paymentForInvoice = Math.min(paidAmount, totalAmount)
-  const debtAmount = Math.max(0, totalAmount - paidAmount)
-  const overpayAmount = Math.max(0, paidAmount - totalAmount)
-  const paymentStatus = paidAmount >= totalAmount ? "PAID" : paidAmount > 0 ? "PARTIAL" : "UNPAID"
 
   // ── DEBUG: kalkulasi payment ──────────────────────────────────────────────
   log.debug("[PURCHASE]", "Payment calculation", {
@@ -131,21 +136,31 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
     totalAmount,
     paidAmountInput: data.paidAmount,   // nilai asli dari input (bisa undefined)
     paidAmountEffective: paidAmount,    // setelah ?? 0
-    debtAmount,
-    overpayAmount,
-    paymentStatus,
     paymentMethod,
     case: paidAmount === 0
       ? "HUTANG_SEMUA"
-      : paidAmount >= totalAmount && overpayAmount === 0
+      : paidAmount >= totalAmount
       ? "LUNAS"
-      : paidAmount > totalAmount
-      ? "OVERPAY"
       : "PARTIAL",
   })
   // ─────────────────────────────────────────────────────────────────────────
 
   const purchase = await prisma.$transaction(async (tx) => {
+    const depositAgg = await tx.deposit.aggregate({
+      where: { partyType: "VENDOR", partyId: data.vendorId, balance: { gt: 0 } },
+      _sum: { balance: true },
+    })
+    const availableDeposit = Number(depositAgg._sum.balance ?? 0)
+    const autoDepositUsed = Math.min(totalAmount, availableDeposit)
+    const effectivePaid = paidAmount + autoDepositUsed
+    const paymentForInvoice = Math.min(totalAmount, effectivePaid)
+    // Komponen cash yang benar-benar dipakai untuk melunasi invoice PO.
+    // Deposit dicatat terpisah sebagai DEPOSIT_OUT, jadi jangan ikut dihitung lagi di PAYMENT_OUT.
+    const cashAppliedToInvoice = Math.max(0, paymentForInvoice - autoDepositUsed)
+    const debtAmount = Math.max(0, totalAmount - effectivePaid)
+    const overpayAmount = Math.max(0, effectivePaid - totalAmount)
+    const paymentStatus = effectivePaid >= totalAmount ? "PAID" : effectivePaid > 0 ? "PARTIAL" : "UNPAID"
+
     // 1. Buat Purchase dengan payment info
     const purchase = await tx.purchase.create({
       data: {
@@ -160,7 +175,7 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
         paymentMethod,
         notes: data.notes,
         receiptImageUrl: data.receiptImageUrl || null,
-        purchaseDate: new Date(data.purchaseDate),
+        purchaseDate: businessDate,
       },
     })
 
@@ -207,7 +222,7 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
     }
 
     // 3. LedgerEntry: INVOICE DEBIT (hutang toko ke vendor bertambah)
-    const invoiceDate = new Date(data.purchaseDate)
+    const invoiceDate = new Date(eventBaseTime.getTime())
     await addEntry({
       partyType: "VENDOR",
       partyId: data.vendorId,
@@ -230,14 +245,14 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
     // 4. LedgerEntry: PAYMENT_OUT CREDIT (toko bayar ke vendor)
     // Beri offset +1ms agar createdAt tidak identik dengan INVOICE entry,
     // sehingga orderBy createdAt deterministik saat query running balance.
-    if (paidAmount > 0) {
+    if (cashAppliedToInvoice > 0) {
       const paymentDate = new Date(invoiceDate.getTime() + 1)
       await addEntry({
         partyType: "VENDOR",
         partyId: data.vendorId,
         type: "PAYMENT_OUT",
         direction: "CREDIT",
-        amount: paymentForInvoice,
+        amount: cashAppliedToInvoice,
         description: `Bayar PO ${code}`,
         paymentMethod,
         referenceType: "PURCHASE",
@@ -248,13 +263,28 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
 
       log.debug("[PURCHASE]", "Ledger PAYMENT_OUT entry created", {
         direction: "CREDIT",
-        amount: paymentForInvoice,
+        amount: cashAppliedToInvoice,
         paymentMethod,
       })
     } else {
       log.debug("[PURCHASE]", "No payment — skipping PAYMENT_OUT ledger entry", {
-        reason: "paidAmount = 0 (hutang semua)",
+        reason: "tidak ada cash yang dialokasikan ke invoice (dibayar oleh deposit / hutang)",
       })
+    }
+
+    if (autoDepositUsed > 0) {
+      await useDepositFifo(
+        "VENDOR",
+        data.vendorId,
+        autoDepositUsed,
+        "PURCHASE",
+        purchase.id,
+        userId,
+        { writeLedger: false },
+        tx
+      )
+      // Tidak ada entry ledger DEPOSIT_OUT pada flow PO.
+      // Konsumsi deposit sudah tercermin di kombinasi INVOICE + PAYMENT_OUT (cash saja).
     }
 
     // 5. Buat VendorDebt jika ada hutang
@@ -265,13 +295,13 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
           purchaseId: purchase.id,
           originalAmount: debtAmount,
           remainingAmount: debtAmount,
-          status: paidAmount === 0 ? "UNPAID" : "PARTIAL",
-          debtDate: new Date(data.purchaseDate),
+          status: effectivePaid === 0 ? "UNPAID" : "PARTIAL",
+          debtDate: businessDate,
         },
       })
       log.debug("[PURCHASE]", "VendorDebt record created", {
         debtAmount,
-        status: paidAmount === 0 ? "UNPAID" : "PARTIAL",
+        status: effectivePaid === 0 ? "UNPAID" : "PARTIAL",
       })
     } else {
       log.debug("[PURCHASE]", "No debt — skipping VendorDebt creation", {
@@ -282,7 +312,7 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
     // 6. Jika overpay → otomatis jadi deposit vendor (DEPOSIT_IN CREDIT)
     if (overpayAmount > 0) {
       // +2ms dari invoiceDate agar urutan entry tetap deterministik
-      const depositDate = new Date(invoiceDate.getTime() + 2)
+      const depositDate = new Date(invoiceDate.getTime() + 3)
       await addEntry({
         partyType: "VENDOR",
         partyId: data.vendorId,
@@ -324,15 +354,15 @@ export async function createPurchase(data: CreatePurchaseInput, userId: string) 
     vendor: vendor.name,
     itemCount: data.items.length,
     totalAmount,
-    paidAmount,
-    debtAmount,
-    overpayAmount,
-    paymentStatus,
+    paidAmount: Number(purchase.paidAmount),
+    debtAmount: Number(purchase.debtAmount),
+    overpayAmount: Number(purchase.changeAmount),
+    paymentStatus: purchase.paymentStatus,
   })
   // ─────────────────────────────────────────────────────────────────────────
 
   // Update ProductVendorPrice catalog setelah PO selesai
-  const purchaseDate = new Date(data.purchaseDate)
+  const purchaseDate = businessDate
   for (const item of data.items) {
     await updateAfterPurchase(item.productId, data.vendorId, item.buyPrice, purchaseDate)
   }

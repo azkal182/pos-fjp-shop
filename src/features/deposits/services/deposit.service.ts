@@ -63,6 +63,7 @@ export async function useDeposit(
   referenceId: string,
   createdBy: string,
   expectedParty?: { partyType: PartyType; partyId: string },
+  options?: { writeLedger?: boolean },
   db: TxClient = globalPrisma
 ) {
   const deposit = await db.deposit.findUniqueOrThrow({ where: { id: depositId } })
@@ -92,21 +93,68 @@ export async function useDeposit(
     data: { depositId, amount, usageType: "PAYMENT", referenceId },
   })
 
-  // LedgerEntry: DEPOSIT_OUT DEBIT (deposit dipakai, "hutang" toko berkurang)
-  await addEntry({
-    partyType: deposit.partyType as PartyType,
-    partyId: deposit.partyId,
-    type: "DEPOSIT_OUT",
-    direction: "DEBIT",
-    amount,
-    description: "Deposit digunakan untuk pembayaran",
-    referenceType,
-    referenceId,
-    createdBy,
-  }, db)
+  const writeLedger = options?.writeLedger ?? true
+  if (writeLedger) {
+    // LedgerEntry DEPOSIT_OUT hanya untuk kasus standalone.
+    // Pada flow PO/POS, invoice + payment sudah merepresentasikan settlement.
+    await addEntry({
+      partyType: deposit.partyType as PartyType,
+      partyId: deposit.partyId,
+      type: "DEPOSIT_OUT",
+      direction: "DEBIT",
+      amount,
+      description: "Deposit digunakan untuk pembayaran",
+      referenceType,
+      referenceId,
+      createdBy,
+    }, db)
+  }
 
   log.info("[DEPOSIT]", "Deposit used", { depositId, amount, referenceType, referenceId })
   return deposit
+}
+
+export async function useDepositFifo(
+  partyType: PartyType,
+  partyId: string,
+  amount: number,
+  referenceType: string,
+  referenceId: string,
+  createdBy: string,
+  options?: { writeLedger?: boolean },
+  db: TxClient = globalPrisma
+) {
+  if (amount <= 0) return { used: 0 }
+
+  const deposits = await db.deposit.findMany({
+    where: { partyType, partyId, balance: { gt: 0 } },
+    orderBy: { createdAt: "asc" },
+    select: { id: true, balance: true },
+  })
+
+  let remaining = amount
+  for (const dep of deposits) {
+    if (remaining <= 0) break
+    const take = Math.min(remaining, Number(dep.balance))
+    if (take <= 0) continue
+    await useDeposit(
+      dep.id,
+      take,
+      referenceType,
+      referenceId,
+      createdBy,
+      { partyType, partyId },
+      options,
+      db
+    )
+    remaining -= take
+  }
+
+  if (remaining > 0) {
+    throw new ValidationError(`Saldo deposit tidak cukup. Kekurangan: Rp ${remaining.toLocaleString("id-ID")}`)
+  }
+
+  return { used: amount }
 }
 
 export async function returnDeposit(

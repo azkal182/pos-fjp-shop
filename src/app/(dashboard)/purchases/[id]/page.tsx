@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator"
 import { PageWrapper } from "@/components/layout/PageWrapper"
 import { DataTable, type Column } from "@/components/shared/DataTable"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
+import { StatusBadge } from "@/components/shared/StatusBadge"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
@@ -27,11 +28,22 @@ interface PurchaseDetail {
   id: string
   code: string
   totalAmount: number
+  paidAmount: number
+  debtAmount: number
+  changeAmount: number
+  paymentMethod: "CASH" | "TRANSFER"
+  paymentStatus: "PAID" | "PARTIAL" | "UNPAID"
   purchaseDate: string
+  createdAt: string
   notes: string | null
   vendor: { id: string; name: string; phone: string | null }
   user: { id: string; name: string; email: string }
   items: PurchaseItem[]
+  vendorDebt: {
+    id: string
+    remainingAmount: number
+    status: "UNPAID" | "PARTIAL" | "PAID"
+  } | null
 }
 
 export default function PurchaseDetailPage() {
@@ -86,6 +98,14 @@ export default function PurchaseDetailPage() {
   if (isLoading) return <LoadingSpinner centered />
   if (!purchase) return null
 
+  const paid = Number(purchase.paidAmount)
+  const debt = Number(purchase.vendorDebt?.remainingAmount ?? purchase.debtAmount)
+  const overpay = Number(purchase.changeAmount)
+  const invoiceSettled = Math.max(0, Number(purchase.totalAmount) - debt)
+  const derivedStatus: "PAID" | "PARTIAL" | "UNPAID" =
+    debt <= 0 ? "PAID" : invoiceSettled > 0 ? "PARTIAL" : "UNPAID"
+  const paymentMethodLabel = purchase.paymentMethod === "TRANSFER" ? "Transfer" : "Tunai"
+
   return (
     <PageWrapper
       actions={
@@ -107,7 +127,7 @@ export default function PurchaseDetailPage() {
                 <div>
                   <CardTitle className="text-base font-mono">{purchase.code}</CardTitle>
                   <p className="text-xs text-muted-foreground">
-                    {format(new Date(purchase.purchaseDate), "dd MMMM yyyy", { locale: idLocale })}
+                    {format(new Date(purchase.purchaseDate), "dd MMMM yyyy", { locale: idLocale })} · {format(new Date(purchase.createdAt), "HH:mm", { locale: idLocale })}
                   </p>
                 </div>
               </div>
@@ -136,6 +156,43 @@ export default function PurchaseDetailPage() {
                   </div>
                 </>
               )}
+              <Separator />
+              <div className="space-y-2 rounded-lg border p-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Status Pembayaran</span>
+                  <StatusBadge status={derivedStatus} />
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Metode</span>
+                  <span>{paymentMethodLabel}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Terbayar (invoice)</span>
+                  <CurrencyDisplay amount={invoiceSettled} className="font-medium text-green-600" />
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-muted-foreground">Tunai/Transfer</span>
+                  <CurrencyDisplay amount={paid} className="font-medium" />
+                </div>
+                {derivedStatus === "PARTIAL" && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-orange-600">Sisa Hutang</span>
+                    <CurrencyDisplay amount={debt} className="font-semibold text-orange-600" />
+                  </div>
+                )}
+                {derivedStatus === "UNPAID" && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-red-600">Hutang</span>
+                    <CurrencyDisplay amount={debt} className="font-semibold text-red-600" />
+                  </div>
+                )}
+                {overpay > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-blue-600">Kelebihan Bayar</span>
+                    <CurrencyDisplay amount={overpay} className="font-semibold text-blue-600" />
+                  </div>
+                )}
+              </div>
               <Separator />
               <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Jumlah Item</span>

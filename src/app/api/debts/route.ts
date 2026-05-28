@@ -26,7 +26,7 @@ export const GET = withHandler(async (req: NextRequest) => {
         customer: { select: { id: true, name: true, phone: true } },
         transaction: { select: { id: true, code: true } },
       },
-      orderBy: { debtDate: "asc" },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
       skip: (page - 1) * limit,
       take: limit,
     }),

@@ -37,6 +37,7 @@ interface PurchaseConfirmDialogProps {
   cart: CartItem[]
   cartTotal: number
   paidAmount: number | undefined
+  vendorDeposit: number
   paymentMethod: string
   isSubmitting: boolean
   onConfirm: (receiptImageUrl: string) => void
@@ -50,6 +51,7 @@ export function PurchaseConfirmDialog({
   cart,
   cartTotal,
   paidAmount,
+  vendorDeposit,
   paymentMethod,
   isSubmitting,
   onConfirm,
@@ -57,11 +59,14 @@ export function PurchaseConfirmDialog({
   const [receiptImageUrl, setReceiptImageUrl] = useState<string | null>(null)
   const [showError, setShowError] = useState(false)
 
-  const paid = paidAmount ?? 0
-  const debtAmount = Math.max(0, cartTotal - paid)
-  const overpay = Math.max(0, paid - cartTotal)
-  const isFullPaid = paid >= cartTotal && overpay === 0
-  const isDebt = paid < cartTotal
+  const cashPaid = paidAmount ?? 0
+  const depositUsed = Math.min(cartTotal, vendorDeposit)
+  const depositRemaining = Math.max(0, vendorDeposit - depositUsed)
+  const effectivePaid = cashPaid + depositUsed
+  const debtAmount = Math.max(0, cartTotal - effectivePaid)
+  const overpay = Math.max(0, effectivePaid - cartTotal)
+  const isFullPaid = effectivePaid >= cartTotal && overpay === 0
+  const isDebt = debtAmount > 0
   const paymentLabel = paymentMethod === "CASH" ? "Tunai" : "Transfer"
 
   function handleConfirm() {
@@ -150,9 +155,21 @@ export function PurchaseConfirmDialog({
               <CurrencyDisplay amount={cartTotal} className="font-bold" />
             </div>
             <Separator />
+            {depositUsed > 0 && (
+              <>
+                <div className="flex justify-between">
+                  <span className="text-blue-700 dark:text-blue-400">Dipakai dari deposit</span>
+                  <CurrencyDisplay amount={depositUsed} className="text-blue-700 dark:text-blue-400 font-semibold" />
+                </div>
+                <div className="flex justify-between text-xs">
+                  <span className="text-blue-700/80 dark:text-blue-300/80">Sisa saldo deposit</span>
+                  <CurrencyDisplay amount={depositRemaining} className="text-blue-700/90 dark:text-blue-300/90 font-semibold" />
+                </div>
+              </>
+            )}
             <div className="flex justify-between">
               <span className="text-muted-foreground">Bayar ({paymentLabel})</span>
-              <CurrencyDisplay amount={paid} />
+              <CurrencyDisplay amount={cashPaid} />
             </div>
             {debtAmount > 0 && (
               <div className="flex justify-between font-semibold text-orange-600">
@@ -197,7 +214,7 @@ export function PurchaseConfirmDialog({
               <span className="text-xs font-semibold text-destructive">* wajib</span>
             </div>
             <p className="text-xs text-muted-foreground">
-              Upload foto nota/invoice dari vendor sebagai bukti pembelian.
+              Upload foto nota/invoice vendor sebagai bukti transaksi pembelian.
             </p>
 
             <div className={showError ? "rounded-lg ring-2 ring-destructive ring-offset-1" : ""}>

@@ -218,7 +218,7 @@ export async function getCustomerPayments(customerId: string) {
 }
 
 export async function getCustomerLedger(customerId: string) {
-  const [debts, customerPayments, orphanDebtPayments] = await Promise.all([
+  const [debts, customerPayments, orphanDebtPayments, deposits, depositUsages] = await Promise.all([
     globalPrisma.debt.findMany({
       where: { customerId },
       include: { transaction: { select: { code: true, transactionDate: true } } },
@@ -248,11 +248,21 @@ export async function getCustomerLedger(customerId: string) {
       },
       orderBy: { paymentDate: "asc" },
     }),
+    globalPrisma.deposit.findMany({
+      where: { partyType: "CUSTOMER", partyId: customerId },
+      orderBy: { createdAt: "asc" },
+      select: { id: true, amount: true, notes: true, createdAt: true, source: true },
+    }),
+    globalPrisma.depositUsage.findMany({
+      where: { deposit: { partyType: "CUSTOMER", partyId: customerId } },
+      include: { deposit: { select: { id: true } } },
+      orderBy: { createdAt: "asc" },
+    }),
   ])
 
   type LedgerEntry = {
     date: Date
-    type: "DEBT" | "PAYMENT"
+    type: "DEBT" | "PAYMENT" | "DEPOSIT_IN" | "DEPOSIT_OUT" | "DEPOSIT_RETURN"
     description: string
     debit: number
     credit: number
@@ -323,6 +333,49 @@ export async function getCustomerLedger(customerId: string) {
     })
   }
 
+  // Deposit Masuk = kredit (customer punya saldo ke toko)
+  for (const dep of deposits) {
+    entries.push({
+      date: dep.createdAt,
+      type: "DEPOSIT_IN",
+      description: `Deposit masuk (${dep.source})`,
+      debit: 0,
+      credit: Number(dep.amount),
+      reference: dep.id,
+      id: `dep-in-${dep.id}`,
+      meta: { notes: dep.notes ?? undefined },
+    })
+  }
+
+  // Deposit dipakai/return = debit (mengurangi saldo deposit customer)
+  for (const du of depositUsages) {
+    if (du.usageType === "PAYMENT") {
+      entries.push({
+        date: du.createdAt,
+        type: "DEPOSIT_OUT",
+        description: "Deposit dipakai",
+        debit: Number(du.amount),
+        credit: 0,
+        reference: du.referenceId ?? du.depositId,
+        id: `dep-use-${du.id}`,
+        meta: { notes: du.notes ?? undefined },
+      })
+      continue
+    }
+    if (du.usageType === "RETURN") {
+      entries.push({
+        date: du.createdAt,
+        type: "DEPOSIT_RETURN",
+        description: "Deposit dikembalikan",
+        debit: Number(du.amount),
+        credit: 0,
+        reference: du.referenceId ?? du.depositId,
+        id: `dep-ret-${du.id}`,
+        meta: { notes: du.notes ?? undefined },
+      })
+    }
+  }
+
   entries.sort((a, b) => a.date.getTime() - b.date.getTime())
 
   let balance = 0
@@ -333,11 +386,12 @@ export async function getCustomerLedger(customerId: string) {
 
   const totalPaidNew = customerPayments.reduce((s, p) => s + Number(p.amount), 0)
   const totalPaidLegacy = orphanDebtPayments.reduce((s, p) => s + Number(p.amount), 0)
+  const totalDepositIn = deposits.reduce((s, d) => s + Number(d.amount), 0)
 
   return {
     ledger,
     totalDebt: debts.reduce((s, d) => s + Number(d.originalAmount), 0),
-    totalPaid: totalPaidNew + totalPaidLegacy,
+    totalPaid: totalPaidNew + totalPaidLegacy + totalDepositIn,
     currentBalance: balance,
   }
 }
