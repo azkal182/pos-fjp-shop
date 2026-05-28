@@ -72,6 +72,12 @@ async function main() {
       ) z
       GROUP BY customer_id
     ),
+    dep_sum AS (
+      SELECT d."partyId" AS customer_id, COALESCE(SUM(d."balance"),0) AS deposit_balance
+      FROM "deposits" d
+      WHERE d."partyType"='CUSTOMER'
+      GROUP BY d."partyId"
+    ),
     led AS (
       SELECT la."partyId" AS customer_id,
              COALESCE((
@@ -87,7 +93,9 @@ async function main() {
     SELECT COUNT(*)::bigint AS value
     FROM led
     LEFT JOIN debt_sum d ON d.customer_id = led.customer_id
-    WHERE COALESCE(led.balance,0) <> COALESCE(d.outstanding,0)
+    LEFT JOIN dep_sum dp ON dp.customer_id = led.customer_id
+    WHERE (COALESCE(d.outstanding,0) > 0 OR COALESCE(dp.deposit_balance,0) > 0)
+      AND ROUND(COALESCE(led.balance,0)::numeric, 2) <> ROUND((COALESCE(d.outstanding,0) - COALESCE(dp.deposit_balance,0))::numeric, 2)
   `)
 
   const vendorLedgerVsDebtMismatch = await scalar(`
@@ -98,6 +106,12 @@ async function main() {
         FROM "vendor_debts" vd
       ) z
       GROUP BY vendor_id
+    ),
+    dep_sum AS (
+      SELECT d."partyId" AS vendor_id, COALESCE(SUM(d."balance"),0) AS deposit_balance
+      FROM "deposits" d
+      WHERE d."partyType"='VENDOR'
+      GROUP BY d."partyId"
     ),
     led AS (
       SELECT la."partyId" AS vendor_id,
@@ -114,7 +128,9 @@ async function main() {
     SELECT COUNT(*)::bigint AS value
     FROM led
     LEFT JOIN debt_sum d ON d.vendor_id = led.vendor_id
-    WHERE COALESCE(led.balance,0) <> COALESCE(d.outstanding,0)
+    LEFT JOIN dep_sum dp ON dp.vendor_id = led.vendor_id
+    WHERE (COALESCE(d.outstanding,0) > 0 OR COALESCE(dp.deposit_balance,0) > 0)
+      AND ROUND(COALESCE(led.balance,0)::numeric, 2) <> ROUND((COALESCE(d.outstanding,0) - COALESCE(dp.deposit_balance,0))::numeric, 2)
   `)
 
   console.log("\n-- Deep Finance Integrity --")
