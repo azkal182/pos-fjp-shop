@@ -135,7 +135,9 @@ export function VendorPaymentForm({
     }
   }
 
-  const isOverLimit = totalOutstanding !== null && amount > totalOutstanding
+  const overpayAmount = totalOutstanding !== null && amount > totalOutstanding
+    ? amount - totalOutstanding
+    : 0
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -175,13 +177,17 @@ export function VendorPaymentForm({
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">Rp</span>
               <Input
                 type="number" min={1} placeholder="0"
-                className={`pl-9 text-lg font-semibold h-11 ${isOverLimit ? "border-destructive" : ""}`}
+                className="pl-9 text-lg font-semibold h-11"
                 {...register("amount", { valueAsNumber: true })}
                 autoFocus
               />
             </div>
             {errors.amount && <p className="text-xs text-destructive">{errors.amount.message}</p>}
-            {isOverLimit && <p className="text-xs text-destructive">Nominal melebihi hutang outstanding</p>}
+            {overpayAmount > 0 && (
+              <p className="text-xs text-blue-700 dark:text-blue-400">
+                Kelebihan Rp {overpayAmount.toLocaleString("id-ID")} otomatis jadi deposit vendor.
+              </p>
+            )}
           </div>
 
           {/* Metode bayar */}
@@ -236,7 +242,7 @@ export function VendorPaymentForm({
 
           <div className="flex gap-2">
             <Button type="button" variant="outline" className="flex-1" onClick={handleClose} disabled={isSubmitting}>Batal</Button>
-            <Button type="submit" className="flex-1" disabled={isSubmitting || !amount || amount <= 0 || isOverLimit}>
+            <Button type="submit" className="flex-1" disabled={isSubmitting || !amount || amount <= 0}>
               {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Konfirmasi Pembayaran
             </Button>

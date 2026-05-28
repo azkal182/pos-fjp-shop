@@ -1,12 +1,11 @@
 import { type NextRequest } from "next/server"
 import { withHandler } from "@/lib/api-handler"
 import { successResponse } from "@/lib/api-response"
-import { ValidationError, NotFoundError, ConflictError } from "@/lib/exceptions"
+import { ValidationError, NotFoundError } from "@/lib/exceptions"
 import { prisma } from "@/lib/prisma"
 import { auth } from "@/lib/auth"
 import {
   allocatePaymentFifo,
-  hasOutstandingDebt,
   getTotalOutstanding,
 } from "@/features/debts/services/debt.service"
 import { createDeposit } from "@/features/deposits/services/deposit.service"
@@ -29,16 +28,31 @@ export const POST = withHandler(async (req: NextRequest) => {
   })
   if (!customer) throw new NotFoundError("Customer")
 
-  const hasDebt = await hasOutstandingDebt(customerId)
-  if (!hasDebt) throw new ConflictError("Customer tidak memiliki hutang outstanding")
-
   const totalOutstanding = await getTotalOutstanding(customerId)
   const effectivePayment = Math.min(amount, totalOutstanding)
   const overpayAmount = Math.max(0, amount - totalOutstanding)
 
   const result = await prisma.$transaction(async (tx) => {
-    // Pass userId sebagai createdBy agar ledger entry PAYMENT_IN ditulis
-    const allocated = await allocatePaymentFifo(customerId, effectivePayment, undefined, notes, tx, userId)
+    let allocated = {
+      allocations: [] as Array<{
+        debtId: string
+        debtCode: string
+        debtDate: Date
+        originalAmount: number
+        currentRemaining: number
+        allocatedAmount: number
+        willBeFullyPaid: boolean
+        remainingAfter: number
+      }>,
+      totalAllocated: 0,
+      remainingChange: effectivePayment,
+      customerPaymentId: null as string | null,
+    }
+
+    if (effectivePayment > 0) {
+      // FIFO tetap prioritas utama jika masih ada hutang
+      allocated = await allocatePaymentFifo(customerId, effectivePayment, undefined, notes, tx, userId)
+    }
 
     if (overpayAmount > 0) {
       await createDeposit(

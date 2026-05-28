@@ -10,6 +10,8 @@ import { Separator } from "@/components/ui/separator"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageWrapper } from "@/components/layout/PageWrapper"
 import { CustomerDebtSummary } from "@/features/customers/components/CustomerDebtSummary"
+import { DebtPaymentForm } from "@/features/debts/components/DebtPaymentForm"
+import { DepositCard } from "@/features/deposits/components/DepositCard"
 import { CustomerForm } from "@/features/customers/components/CustomerForm"
 import { DataTable, type Column } from "@/components/shared/DataTable"
 import { StatusBadge } from "@/components/shared/StatusBadge"
@@ -57,7 +59,9 @@ export default function CustomerDetailPage() {
   const [customer, setCustomer] = useState<CustomerDetail | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isPayOpen, setIsPayOpen] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
+  const [refreshKey, setRefreshKey] = useState(0)
 
   async function fetchCustomer() {
     try {
@@ -175,6 +179,9 @@ export default function CustomerDetailPage() {
             <Pencil className="h-4 w-4 mr-2" />
             Edit Customer
           </Button>
+          <Button variant="outline" onClick={() => setIsPayOpen(true)}>
+            Bayar / Deposit
+          </Button>
         </div>
       }
     >
@@ -220,6 +227,7 @@ export default function CustomerDetailPage() {
 
           {/* Ringkasan Hutang */}
           <CustomerDebtSummary customerId={id} />
+          <DepositCard partyType="CUSTOMER" partyId={id} refreshKey={refreshKey} />
         </div>
 
         {/* Tabs: Transaksi & Hutang */}
@@ -297,6 +305,17 @@ export default function CustomerDetailPage() {
         onSubmit={handleUpdate}
         isLoading={isUpdating}
         mode="edit"
+      />
+
+      <DebtPaymentForm
+        open={isPayOpen}
+        onOpenChange={setIsPayOpen}
+        customerId={id}
+        customerName={customer.name}
+        onSuccess={() => {
+          fetchCustomer()
+          setRefreshKey((k) => k + 1)
+        }}
       />
     </PageWrapper>
   )

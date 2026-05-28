@@ -3,6 +3,8 @@ import { withHandler } from "@/lib/api-handler"
 import { successResponse } from "@/lib/api-response"
 import { ValidationError } from "@/lib/exceptions"
 import { auth } from "@/lib/auth"
+import { createDeposit } from "@/features/deposits/services/deposit.service"
+import { getTotalVendorOutstanding } from "@/features/vendors/services/vendor-debt.service"
 import { z } from "zod"
 import {
   allocatePaymentFifo,
@@ -32,6 +34,27 @@ export const POST = withHandler(async (req: NextRequest) => {
     if (!vendorDebtId) throw new ValidationError("vendorDebtId wajib diisi untuk mode invoice")
     const result = await allocatePaymentToInvoice(vendorDebtId, amount, paymentMethod, userId, notes)
     return successResponse(result, 201)
+  }
+
+  const totalOutstanding = await getTotalVendorOutstanding(vendorId)
+  if (totalOutstanding <= 0) {
+    const deposit = await createDeposit(
+      "VENDOR",
+      vendorId,
+      amount,
+      "MANUAL",
+      null,
+      userId,
+      "Pembayaran saat hutang vendor kosong"
+    )
+    return successResponse({
+      allocations: [],
+      totalAllocated: 0,
+      remainingChange: amount,
+      overpayAmount: amount,
+      depositCreated: amount,
+      depositId: deposit.id,
+    }, 201)
   }
 
   const result = await allocatePaymentFifo(vendorId, amount, paymentMethod, userId, notes)

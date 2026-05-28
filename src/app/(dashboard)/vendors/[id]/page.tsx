@@ -10,6 +10,7 @@ import { VendorLedger } from "@/features/vendors/components/VendorLedger"
 import { VendorForm } from "@/features/vendors/components/VendorForm"
 import { DepositCard } from "@/features/deposits/components/DepositCard"
 import { VendorPurchaseHistory } from "@/features/vendors/components/VendorPurchaseHistory"
+import { VendorPaymentForm } from "@/features/vendors/components/VendorPaymentForm"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
 import { useToast } from "@/hooks/useToast"
 import type { CreateVendorInput } from "@/features/vendors/schemas"
@@ -32,6 +33,7 @@ export default function VendorDetailPage() {
   const [vendor, setVendor] = useState<Vendor | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isEditOpen, setIsEditOpen] = useState(false)
+  const [isPayOpen, setIsPayOpen] = useState(false)
   const [isUpdating, setIsUpdating] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -79,6 +81,10 @@ export default function VendorDetailPage() {
           <Button variant="outline" size="sm" onClick={() => router.push(`/purchases/new?vendorId=${id}`)}>
             <Plus className="h-4 w-4 sm:mr-1.5" />
             <span className="hidden sm:inline">Pembelian Baru</span>
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => setIsPayOpen(true)}>
+            <span className="hidden sm:inline">Bayar / Deposit</span>
+            <span className="sm:hidden">Bayar</span>
           </Button>
           <Button size="sm" onClick={() => setIsEditOpen(true)}>
             <Pencil className="h-4 w-4 sm:mr-1.5" />
@@ -141,6 +147,17 @@ export default function VendorDetailPage() {
         onSubmit={handleUpdate}
         isLoading={isUpdating}
         mode="edit"
+      />
+
+      <VendorPaymentForm
+        open={isPayOpen}
+        onOpenChange={setIsPayOpen}
+        vendorId={id}
+        vendorName={vendor.name}
+        mode="fifo"
+        onSuccess={() => {
+          setRefreshKey((k) => k + 1)
+        }}
       />
     </PageWrapper>
   )
