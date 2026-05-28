@@ -9,6 +9,7 @@ import {
   hasOutstandingDebt,
   getTotalOutstanding,
 } from "@/features/debts/services/debt.service"
+import { createDeposit } from "@/features/deposits/services/deposit.service"
 import { debtPaymentSchema } from "@/features/debts/schemas/debt.schema"
 import { log } from "@/lib/logger"
 
@@ -31,22 +32,37 @@ export const POST = withHandler(async (req: NextRequest) => {
   const hasDebt = await hasOutstandingDebt(customerId)
   if (!hasDebt) throw new ConflictError("Customer tidak memiliki hutang outstanding")
 
-  // Validasi nominal tidak melebihi total hutang
   const totalOutstanding = await getTotalOutstanding(customerId)
-  if (amount > totalOutstanding) {
-    throw new ValidationError(
-      `Nominal melebihi total hutang. Maksimal: Rp ${totalOutstanding.toLocaleString("id-ID")}`
-    )
-  }
+  const effectivePayment = Math.min(amount, totalOutstanding)
+  const overpayAmount = Math.max(0, amount - totalOutstanding)
 
-  // Pass userId sebagai createdBy agar ledger entry PAYMENT_IN ditulis
-  const result = await allocatePaymentFifo(customerId, amount, undefined, notes, undefined, userId)
+  const result = await prisma.$transaction(async (tx) => {
+    // Pass userId sebagai createdBy agar ledger entry PAYMENT_IN ditulis
+    const allocated = await allocatePaymentFifo(customerId, effectivePayment, undefined, notes, tx, userId)
+
+    if (overpayAmount > 0) {
+      await createDeposit(
+        "CUSTOMER",
+        customerId,
+        overpayAmount,
+        "MANUAL",
+        allocated.customerPaymentId,
+        userId,
+        "Kelebihan pembayaran hutang customer",
+        tx
+      )
+    }
+
+    return { ...allocated, overpayAmount, depositCreated: overpayAmount }
+  })
 
   log.info("[DEBT]", "Manual debt payment processed", {
     customerId,
     customerName: customer.name,
     amount,
     totalOutstanding,
+    effectivePayment,
+    overpayAmount,
     allocationsCount: result.allocations.length,
     customerPaymentId: result.customerPaymentId,
   })

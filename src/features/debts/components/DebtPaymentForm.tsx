@@ -118,7 +118,7 @@ export function DebtPaymentForm({
     }
   }
 
-  const isOverLimit = totalOutstanding !== null && amount > totalOutstanding
+  const overpayAmount = totalOutstanding !== null ? Math.max(0, amount - totalOutstanding) : 0
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
@@ -163,20 +163,19 @@ export function DebtPaymentForm({
                 id="pay-amount"
                 type="number"
                 min={1}
-                max={totalOutstanding ?? undefined}
                 placeholder="0"
-                className={`pl-9 text-lg font-semibold h-11 ${isOverLimit ? "border-destructive" : ""}`}
+                className="pl-9 text-lg font-semibold h-11"
                 {...register("amount", { valueAsNumber: true })}
-                aria-invalid={!!errors.amount || isOverLimit}
+                aria-invalid={!!errors.amount}
                 autoFocus
               />
             </div>
             {errors.amount && (
               <p className="text-xs text-destructive">{errors.amount.message}</p>
             )}
-            {isOverLimit && (
-              <p className="text-xs text-destructive">
-                Nominal melebihi total hutang (Rp {totalOutstanding?.toLocaleString("id-ID")})
+            {overpayAmount > 0 && (
+              <p className="text-xs text-blue-700 dark:text-blue-400">
+                Kelebihan Rp {overpayAmount.toLocaleString("id-ID")} akan otomatis dicatat sebagai deposit customer.
               </p>
             )}
           </div>
@@ -203,7 +202,7 @@ export function DebtPaymentForm({
             <Button
               type="submit"
               className="flex-1"
-              disabled={isSubmitting || !amount || amount <= 0 || isOverLimit}
+              disabled={isSubmitting || !amount || amount <= 0}
             >
               {isSubmitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Konfirmasi Pembayaran
