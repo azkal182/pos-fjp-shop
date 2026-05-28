@@ -1,6 +1,8 @@
 import type { Metadata } from "next"
 import { LoginForm } from "@/features/auth/components/LoginForm"
 
+export const dynamic = "force-dynamic"
+
 export const metadata: Metadata = {
   title: "Masuk",
 }
