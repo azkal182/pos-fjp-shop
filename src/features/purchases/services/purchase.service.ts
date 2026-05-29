@@ -14,6 +14,17 @@ function parseLocalDateOnly(dateStr: string) {
   return new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0)
 }
 
+function parseDateFilter(dateStr: string, mode: "start" | "end") {
+  // YYYY-MM-DD => local boundary, hindari shift UTC
+  if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    const [y, m, d] = dateStr.split("-").map((v) => Number(v))
+    return mode === "start"
+      ? new Date(y, (m || 1) - 1, d || 1, 0, 0, 0, 0)
+      : new Date(y, (m || 1) - 1, d || 1, 23, 59, 59, 999)
+  }
+  return new Date(dateStr)
+}
+
 export interface PurchaseFilter {
   vendorId?: string
   dateFrom?: string
@@ -29,8 +40,8 @@ export async function getAllPurchases(filter: PurchaseFilter = {}) {
     ...(vendorId && { vendorId }),
     ...((dateFrom || dateTo) && {
       purchaseDate: {
-        ...(dateFrom && { gte: new Date(dateFrom) }),
-        ...(dateTo && { lte: new Date(dateTo) }),
+        ...(dateFrom && { gte: parseDateFilter(dateFrom, "start") }),
+        ...(dateTo && { lte: parseDateFilter(dateTo, "end") }),
       },
     }),
   }

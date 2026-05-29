@@ -91,8 +91,12 @@ export function VendorPurchaseHistory({ vendorId, vendorName = "Vendor", onPayme
     {
       header: "Terbayar",
       render: (row) => {
-        const remaining = Number(row.vendorDebt?.remainingAmount ?? 0)
-        const settled = Math.max(0, Number(row.totalAmount) - remaining)
+        const hasDebtRow = !!row.vendorDebt
+        const remaining = hasDebtRow ? Number(row.vendorDebt!.remainingAmount) : Number(row.debtAmount)
+        const settled =
+          hasDebtRow || row.paymentStatus === "PAID"
+            ? Math.max(0, Number(row.totalAmount) - remaining)
+            : Number(row.paidAmount)
         return (
           <div className="leading-tight">
             <CurrencyDisplay amount={settled} className="text-sm text-green-600 font-medium" />

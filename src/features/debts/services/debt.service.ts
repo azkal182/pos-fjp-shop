@@ -376,7 +376,11 @@ export async function getCustomerLedger(customerId: string) {
     }
   }
 
-  entries.sort((a, b) => a.date.getTime() - b.date.getTime())
+  entries.sort((a, b) => {
+    const byDate = a.date.getTime() - b.date.getTime()
+    if (byDate !== 0) return byDate
+    return a.id.localeCompare(b.id)
+  })
 
   let balance = 0
   const ledger = entries.map((entry) => {
@@ -391,7 +395,13 @@ export async function getCustomerLedger(customerId: string) {
   return {
     ledger,
     totalDebt: debts.reduce((s, d) => s + Number(d.originalAmount), 0),
-    totalPaid: totalPaidNew + totalPaidLegacy + totalDepositIn,
+    // "Total Dibayar" pada buku hutang = pembayaran hutang aktual.
+    // Deposit masuk tetap ditampilkan di ledger entries, tapi tidak dijumlahkan sebagai pembayaran hutang.
+    totalPaid: totalPaidNew + totalPaidLegacy,
+    totalDepositIn,
+    totalDepositOut: depositUsages
+      .filter((u) => u.usageType === "PAYMENT" || u.usageType === "RETURN")
+      .reduce((s, u) => s + Number(u.amount), 0),
     currentBalance: balance,
   }
 }

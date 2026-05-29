@@ -112,7 +112,7 @@ export function DebtReportPdf({
                 <Text style={[shared.tableHeaderCell, { flex: 2 }]}>Kode Transaksi</Text>
                 <Text style={[shared.tableHeaderCell, { flex: 2 }]}>Tanggal</Text>
                 <Text style={[shared.tableHeaderCell, { flex: 2, textAlign: "right" }]}>Nilai Asal</Text>
-                <Text style={[shared.tableHeaderCell, { flex: 2, textAlign: "right" }]}>Terbayar</Text>
+                <Text style={[shared.tableHeaderCell, { flex: 2, textAlign: "right" }]}>Bayar Hutang</Text>
                 <Text style={[shared.tableHeaderCell, { flex: 2, textAlign: "right" }]}>Sisa Hutang</Text>
                 <Text style={[shared.tableHeaderCell, { flex: 1.5, textAlign: "center" }]}>Status</Text>
               </View>

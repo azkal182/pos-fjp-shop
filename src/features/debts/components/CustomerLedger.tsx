@@ -27,6 +27,8 @@ interface LedgerData {
   ledger: LedgerEntry[]
   totalDebt: number
   totalPaid: number
+  totalDepositIn: number
+  totalDepositOut: number
   currentBalance: number
 }
 
@@ -97,9 +99,23 @@ export function CustomerLedger({ customerId, refreshKey }: CustomerLedgerProps) 
           <div className="rounded-md bg-green-50 dark:bg-green-950/20 border border-green-100 dark:border-green-900/30 px-3 py-2">
             <div className="flex items-center gap-1.5 text-xs text-green-600 dark:text-green-400 mb-0.5">
               <TrendingUp className="h-3 w-3" />
-              Total Dibayar
+              Bayar Hutang
             </div>
             <CurrencyDisplay amount={data.totalPaid} className="text-sm font-semibold text-green-700 dark:text-green-400" />
+          </div>
+          <div className="rounded-md bg-blue-50 dark:bg-blue-950/20 border border-blue-100 dark:border-blue-900/30 px-3 py-2">
+            <div className="flex items-center gap-1.5 text-xs text-blue-600 dark:text-blue-400 mb-0.5">
+              <TrendingUp className="h-3 w-3" />
+              Deposit Masuk
+            </div>
+            <CurrencyDisplay amount={data.totalDepositIn} className="text-sm font-semibold text-blue-700 dark:text-blue-400" />
+          </div>
+          <div className="rounded-md bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 px-3 py-2">
+            <div className="flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400 mb-0.5">
+              <TrendingDown className="h-3 w-3" />
+              Deposit Dipakai
+            </div>
+            <CurrencyDisplay amount={data.totalDepositOut} className="text-sm font-semibold text-amber-700 dark:text-amber-400" />
           </div>
         </div>
       </CardHeader>
