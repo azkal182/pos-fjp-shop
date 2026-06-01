@@ -44,6 +44,7 @@ interface ProductTableProps {
     categoryId: string
     isActive: string
     vendorId?: string
+    lowStock?: string
   }
   onFilterChange: (key: string, value: string) => void
   onPageChange: (page: number) => void
@@ -231,6 +232,18 @@ export function ProductTable({
             <SelectItem value="all">Semua Status</SelectItem>
             <SelectItem value="true">Aktif</SelectItem>
             <SelectItem value="false">Nonaktif</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select
+          value={filters.lowStock === "true" ? "true" : "all"}
+          onValueChange={(v) => onFilterChange("lowStock", v === "all" ? "" : v)}
+        >
+          <SelectTrigger className="w-44">
+            <SelectValue placeholder="Semua Stok" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Semua Stok</SelectItem>
+            <SelectItem value="true">Stok Rendah</SelectItem>
           </SelectContent>
         </Select>
       </div>

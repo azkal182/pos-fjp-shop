@@ -25,7 +25,7 @@ export default function ProductsPage() {
     Promise.all([
       fetch("/api/categories").then((r) => r.json()).then((j) => setCategories(j.data ?? [])),
       fetch("/api/vendors?isActive=true").then((r) => r.json()).then((j) => setVendors(j.data ?? [])),
-      fetch("/api/products?lowStock=true&limit=1").then((r) => r.json()).then((j) => setLowStockCount(j.meta?.total ?? 0)),
+      fetch("/api/products?isActive=true&lowStock=true&limit=1").then((r) => r.json()).then((j) => setLowStockCount(j.meta?.total ?? 0)),
     ]).catch(() => {})
   }, [])
 
@@ -70,7 +70,10 @@ export default function ProductsPage() {
             variant="outline"
             size="sm"
             className="text-xs border-yellow-300 text-yellow-700 hover:bg-yellow-100 dark:border-yellow-700 dark:text-yellow-400"
-            onClick={() => setFilter("isActive", "true")}
+            onClick={() => {
+              setFilter("isActive", "true")
+              setFilter("lowStock", "true")
+            }}
           >
             Lihat Stok Rendah
           </Button>
