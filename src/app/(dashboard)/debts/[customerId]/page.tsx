@@ -10,6 +10,7 @@ import { PageWrapper } from "@/components/layout/PageWrapper"
 import { DebtTable } from "@/features/debts/components/DebtTable"
 import { CustomerDebtSummary } from "@/features/customers/components/CustomerDebtSummary"
 import { CustomerLedger } from "@/features/debts/components/CustomerLedger"
+import { CustomerPaymentHistory } from "@/features/debts/components/CustomerPaymentHistory"
 import { DepositCard } from "@/features/deposits/components/DepositCard"
 import { DebtPaymentForm } from "@/features/debts/components/DebtPaymentForm"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
@@ -135,12 +136,17 @@ export default function CustomerDebtsPage() {
           <Tabs defaultValue="ledger">
             <TabsList className="w-full">
               <TabsTrigger value="ledger" className="flex-1">Buku Hutang</TabsTrigger>
+              <TabsTrigger value="payments" className="flex-1">Riwayat Bayar</TabsTrigger>
               <TabsTrigger value="debts" className="flex-1">Per Transaksi</TabsTrigger>
             </TabsList>
 
             {/* Tab Buku Hutang — tampilan kredit/debit */}
             <TabsContent value="ledger" className="mt-4">
               <CustomerLedger customerId={customerId} refreshKey={ledgerRefreshKey} />
+            </TabsContent>
+
+            <TabsContent value="payments" className="mt-4">
+              <CustomerPaymentHistory customerId={customerId} refreshKey={ledgerRefreshKey} />
             </TabsContent>
 
             {/* Tab Per Transaksi — detail hutang per TRX */}

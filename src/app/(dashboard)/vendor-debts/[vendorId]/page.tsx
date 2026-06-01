@@ -7,6 +7,7 @@ import {
   Clock, TrendingDown, TrendingUp, Wallet, RefreshCw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageWrapper } from "@/components/layout/PageWrapper"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { StatusBadge } from "@/components/shared/StatusBadge"
@@ -14,6 +15,7 @@ import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useToast } from "@/hooks/useToast"
 import { VendorPaymentModal } from "@/features/vendors/components/VendorPaymentModal"
+import { VendorPaymentHistory } from "@/features/vendors/components/VendorPaymentHistory"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
 
@@ -83,6 +85,7 @@ export default function VendorDebtDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isLedgerLoading, setIsLedgerLoading] = useState(true)
   const [isRecalculating, setIsRecalculating] = useState(false)
+  const [paymentRefreshKey, setPaymentRefreshKey] = useState(0)
 
   // Payment modal state
   const [payModal, setPayModal] = useState<{
@@ -150,6 +153,7 @@ export default function VendorDebtDetailPage() {
   function handlePaymentSuccess() {
     fetchAll()
     fetchLedger()
+    setPaymentRefreshKey((k) => k + 1)
   }
 
   if (isLoading || !vendor) return <LoadingSpinner centered />
@@ -267,69 +271,15 @@ export default function VendorDebtDetailPage() {
 
         {/* ── Konten utama ── */}
         <div className="lg:col-span-2 space-y-6">
-          {/* Daftar hutang per PO */}
-          <div className="rounded-xl border bg-card overflow-hidden">
-            <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">Hutang per PO</h3>
-              {hasDebt && (
-                <span className="text-xs text-muted-foreground">{summary.activeDebtsCount} belum lunas</span>
-              )}
-            </div>
+          <Tabs defaultValue="ledger">
+            <TabsList className="w-full">
+              <TabsTrigger value="ledger" className="flex-1">Buku Besar</TabsTrigger>
+              <TabsTrigger value="payments" className="flex-1">Riwayat Bayar</TabsTrigger>
+              <TabsTrigger value="debts" className="flex-1">Per PO Hutang</TabsTrigger>
+            </TabsList>
 
-            {!summary || summary.debts.length === 0 ? (
-              <div className="px-4 py-10 text-center">
-                <CheckCircle2 className="h-10 w-10 text-green-500/40 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">Semua PO sudah lunas</p>
-              </div>
-            ) : (
-              <div className="divide-y">
-                {summary.debts.map((debt) => (
-                  <div key={debt.id} className="px-4 py-3 flex items-center gap-4">
-                    <div className="flex-1 min-w-0 space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-mono text-sm font-semibold">{debt.purchase.code}</span>
-                        <StatusBadge status={debt.status} />
-                      </div>
-                      <p className="text-xs text-muted-foreground">
-                        {debt.purchase.purchaseDate
-                          ? format(new Date(debt.purchase.purchaseDate), "dd MMM yyyy", { locale: idLocale })
-                          : debt.debtDate
-                          ? format(new Date(debt.debtDate), "dd MMM yyyy", { locale: idLocale })
-                          : "—"}
-                        {" · "}Total PO: <CurrencyDisplay amount={Number(debt.originalAmount)} className="text-xs" />
-                      </p>
-                    </div>
-                    <div className="text-right shrink-0 space-y-0.5">
-                      <CurrencyDisplay
-                        amount={Number(debt.remainingAmount)}
-                        className="text-sm font-bold text-red-600"
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Terbayar: <CurrencyDisplay amount={Number(debt.paidAmount)} className="text-xs text-green-600" />
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-8 text-xs gap-1.5 shrink-0"
-                      onClick={() => setPayModal({
-                        open: true,
-                        mode: "invoice",
-                        debtId: debt.id,
-                        maxAmount: Number(debt.remainingAmount),
-                      })}
-                    >
-                      <Banknote className="h-3.5 w-3.5" />
-                      Bayar
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* Buku Besar */}
-          <div className="rounded-xl border bg-card overflow-hidden">
+            <TabsContent value="ledger" className="mt-4">
+              <div className="rounded-xl border bg-card overflow-hidden">
             <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
               <h3 className="text-sm font-semibold">Buku Besar</h3>
               <div className="flex items-center gap-2">
@@ -447,7 +397,75 @@ export default function VendorDebtDetailPage() {
                 </div>
               </>
             )}
-          </div>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="payments" className="mt-4">
+              <VendorPaymentHistory vendorId={vendorId} refreshKey={paymentRefreshKey} />
+            </TabsContent>
+
+            <TabsContent value="debts" className="mt-4">
+              <div className="rounded-xl border bg-card overflow-hidden">
+                <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
+                  <h3 className="text-sm font-semibold">Hutang per PO</h3>
+                  {hasDebt && (
+                    <span className="text-xs text-muted-foreground">{summary.activeDebtsCount} belum lunas</span>
+                  )}
+                </div>
+
+                {!summary || summary.debts.length === 0 ? (
+                  <div className="px-4 py-10 text-center">
+                    <CheckCircle2 className="h-10 w-10 text-green-500/40 mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">Semua PO sudah lunas</p>
+                  </div>
+                ) : (
+                  <div className="divide-y">
+                    {summary.debts.map((debt) => (
+                      <div key={debt.id} className="px-4 py-3 flex items-center gap-4">
+                        <div className="flex-1 min-w-0 space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono text-sm font-semibold">{debt.purchase.code}</span>
+                            <StatusBadge status={debt.status} />
+                          </div>
+                          <p className="text-xs text-muted-foreground">
+                            {debt.purchase.purchaseDate
+                              ? format(new Date(debt.purchase.purchaseDate), "dd MMM yyyy", { locale: idLocale })
+                              : debt.debtDate
+                              ? format(new Date(debt.debtDate), "dd MMM yyyy", { locale: idLocale })
+                              : "—"}
+                            {" · "}Total PO: <CurrencyDisplay amount={Number(debt.originalAmount)} className="text-xs" />
+                          </p>
+                        </div>
+                        <div className="text-right shrink-0 space-y-0.5">
+                          <CurrencyDisplay
+                            amount={Number(debt.remainingAmount)}
+                            className="text-sm font-bold text-red-600"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            Terbayar: <CurrencyDisplay amount={Number(debt.paidAmount)} className="text-xs text-green-600" />
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs gap-1.5 shrink-0"
+                          onClick={() => setPayModal({
+                            open: true,
+                            mode: "invoice",
+                            debtId: debt.id,
+                            maxAmount: Number(debt.remainingAmount),
+                          })}
+                        >
+                          <Banknote className="h-3.5 w-3.5" />
+                          Bayar
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </TabsContent>
+          </Tabs>
         </div>
       </div>
 
