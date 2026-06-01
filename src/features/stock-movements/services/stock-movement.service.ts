@@ -2,6 +2,7 @@ import type { PrismaClient, StockMovementType } from "@/generated/prisma"
 import { prisma as globalPrisma } from "@/lib/prisma"
 import { log } from "@/lib/logger"
 import { calculatePagination } from "@/lib/api-response"
+import { ValidationError } from "@/lib/exceptions"
 
 type TxClient = Omit<
   PrismaClient,
@@ -23,8 +24,11 @@ export async function createMovement(tx: TxClient, data: CreateMovementData) {
   const product = await tx.product.findUniqueOrThrow({ where: { id: data.productId } })
   const stockBefore = product.stock
   const stockAfter = stockBefore + data.quantity
+  if (stockAfter < 0) {
+    throw new ValidationError(`Stok tidak cukup. Perubahan ${data.quantity} membuat stok menjadi ${stockAfter}`)
+  }
 
-  await tx.stockMovement.create({
+  const movement = await tx.stockMovement.create({
     data: {
       productId: data.productId,
       type: data.type,
@@ -51,6 +55,8 @@ export async function createMovement(tx: TxClient, data: CreateMovementData) {
     stockAfter,
     referenceCode: data.referenceCode,
   })
+
+  return movement
 }
 
 export interface StockMovementFilter {
@@ -89,7 +95,7 @@ export async function getAllStockMovements(filter: StockMovementFilter = {}) {
     globalPrisma.stockMovement.findMany({
       where,
       include: { product: { select: { id: true, name: true, code: true, unit: true } } },
-      orderBy: { createdAt: "desc" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (page - 1) * limit,
       take: limit,
     }),

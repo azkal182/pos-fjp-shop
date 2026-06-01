@@ -68,9 +68,30 @@ async function main() {
 
   await prisma.$transaction(async (tx) => {
     for (const row of mismatches) {
+      const product = await tx.product.findUniqueOrThrow({
+        where: { id: row.productId },
+        select: { stock: true },
+      })
+      const current = Number(product.stock)
+      const expected = Number(row.expectedStock)
+      const delta = expected - current
+      if (delta === 0) continue
+
+      await tx.stockMovement.create({
+        data: {
+          productId: row.productId,
+          type: delta > 0 ? "ADJUSTMENT_IN" : "ADJUSTMENT_OUT",
+          quantity: delta,
+          stockBefore: current,
+          stockAfter: expected,
+          referenceCode: "AUTO-REBUILD-STOCK",
+          notes: `AUTO_REBUILD_STOCK expected=${expected} before=${current}`,
+        },
+      })
+
       await tx.product.update({
         where: { id: row.productId },
-        data: { stock: Number(row.expectedStock) },
+        data: { stock: expected },
       })
     }
   }, 

@@ -31,16 +31,14 @@ export const POST = withHandler(async (req: NextRequest) => {
   const actualQty = type === "ADJUSTMENT_OUT" ? -quantity : quantity
 
   const movement = await prisma.$transaction(async (tx) => {
-    await createMovement(tx, {
+    const created = await createMovement(tx, {
       productId,
       type,
       quantity: actualQty,
       notes,
     })
-
-    return tx.stockMovement.findFirst({
-      where: { productId, type },
-      orderBy: { createdAt: "desc" },
+    return tx.stockMovement.findUnique({
+      where: { id: created.id },
       include: { product: { select: { id: true, name: true, code: true, unit: true, stock: true } } },
     })
   })

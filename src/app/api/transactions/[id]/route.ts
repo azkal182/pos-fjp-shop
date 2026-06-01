@@ -56,26 +56,51 @@ export const PATCH = withHandler(async (req: NextRequest, ctx) => {
   const { items, discountAmount } = parsed.data
 
   await prisma.$transaction(async (tx) => {
-    // Lepas semua reserved stock lama
-    for (const item of existing.items) {
-      await tx.product.update({
-        where: { id: item.productId },
-        data: { reservedStock: { decrement: item.quantity } },
-      })
+    const oldQty = new Map<string, number>()
+    const newQty = new Map<string, number>()
+    for (const it of existing.items) {
+      oldQty.set(it.productId, (oldQty.get(it.productId) ?? 0) + it.quantity)
+    }
+    for (const it of items) {
+      newQty.set(it.productId, (newQty.get(it.productId) ?? 0) + it.quantity)
     }
 
-    // Validasi stok baru
-    for (const item of items) {
-      const product = await tx.product.findUnique({
-        where: { id: item.productId },
-        select: { stock: true, reservedStock: true, name: true, isActive: true },
+    // Validasi produk aktif dulu
+    const productIds = Array.from(new Set(items.map((i) => i.productId)))
+    for (const productId of productIds) {
+      const p = await tx.product.findUnique({
+        where: { id: productId },
+        select: { id: true, name: true, isActive: true },
       })
-      if (!product || !product.isActive) throw new ValidationError(`Produk tidak ditemukan`)
-      const available = product.stock - product.reservedStock
-      if (available < item.quantity) {
-        throw new ValidationError(
-          `Stok ${product.name} tidak cukup. Tersedia: ${available}, diminta: ${item.quantity}`
+      if (!p || !p.isActive) throw new ValidationError(`Produk tidak ditemukan`)
+    }
+
+    // Terapkan delta reserve secara atomik per produk:
+    // delta > 0: tambah reserve dengan syarat stok tersedia
+    // delta < 0: kurangi reserve
+    const allProductIds = new Set([...oldQty.keys(), ...newQty.keys()])
+    for (const productId of allProductIds) {
+      const before = oldQty.get(productId) ?? 0
+      const after = newQty.get(productId) ?? 0
+      const delta = after - before
+      if (delta > 0) {
+        const updated = await tx.$executeRawUnsafe<number>(
+          `UPDATE "products"
+           SET "reservedStock" = "reservedStock" + $1
+           WHERE "id" = $2
+             AND ("stock" - "reservedStock") >= $1`,
+          delta,
+          productId
         )
+        if (updated === 0) {
+          const product = await tx.product.findUnique({ where: { id: productId }, select: { name: true } })
+          throw new ValidationError(`Stok ${product?.name ?? productId} tidak cukup untuk update draft`)
+        }
+      } else if (delta < 0) {
+        await tx.product.update({
+          where: { id: productId },
+          data: { reservedStock: { decrement: Math.abs(delta) } },
+        })
       }
     }
 
@@ -103,11 +128,6 @@ export const PATCH = withHandler(async (req: NextRequest, ctx) => {
           discountAmount: item.discountAmount,
           subtotal: (item.sellPrice - item.discountAmount) * item.quantity,
         },
-      })
-      // Reserve stok baru
-      await tx.product.update({
-        where: { id: item.productId },
-        data: { reservedStock: { increment: item.quantity } },
       })
     }
 

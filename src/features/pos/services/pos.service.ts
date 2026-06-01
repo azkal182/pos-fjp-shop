@@ -85,11 +85,18 @@ export async function createDraft(payload: CreateDraftInput, userId: string) {
         },
       })
 
-      // 3. Kurangi reservedStock (bukan stock)
-      await tx.product.update({
-        where: { id: item.productId },
-        data: { reservedStock: { increment: item.quantity } },
-      })
+      // 3. Reserve stok secara atomik untuk mencegah race condition
+      const updated = await tx.$executeRawUnsafe<number>(
+        `UPDATE "products"
+         SET "reservedStock" = "reservedStock" + $1
+         WHERE "id" = $2
+           AND ("stock" - "reservedStock") >= $1`,
+        item.quantity,
+        item.productId
+      )
+      if (updated === 0) {
+        throw new ValidationError(`Stok tidak cukup saat reservasi. Produk: ${product.name}`)
+      }
     }
 
     log.info("[POS]", "Draft created", { code, transactionId: trx.id, itemCount: items.length })
