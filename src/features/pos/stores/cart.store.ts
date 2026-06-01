@@ -8,16 +8,18 @@ interface CartState {
   customerName: string | null
   customerHasDebt: boolean
   customerOutstandingDebt: number
+  walkInSelected: boolean
   discountAmount: number
   paymentMethod: "CASH" | "TRANSFER"
   paidAmount: number
 
   // Actions
-  addItem: (product: Omit<CartItem, "quantity" | "discountAmount" | "subtotal">) => void
+  addItem: (product: Omit<CartItem, "subtotal">) => void
   removeItem: (productId: string) => void
   updateQty: (productId: string, qty: number) => void
   updateItemDiscount: (productId: string, discount: number) => void
   setCustomer: (customerId: string, customerName: string, hasDebt: boolean, outstandingDebt: number) => void
+  setWalkIn: () => void
   clearCustomer: () => void
   setDiscount: (amount: number) => void
   setPaymentMethod: (method: "CASH" | "TRANSFER") => void
@@ -43,23 +45,31 @@ export const useCartStore = create<CartState>((set, get) => ({
   customerName: null,
   customerHasDebt: false,
   customerOutstandingDebt: 0,
+  walkInSelected: false,
   discountAmount: 0,
   paymentMethod: "CASH",
   paidAmount: 0,
 
   addItem: (product) => {
     set((state) => {
+      const incomingQty = Math.max(1, product.quantity)
       const existing = state.items.find((i) => i.productId === product.productId)
       if (existing) {
+        const nextQty = existing.quantity + incomingQty
         return {
           items: state.items.map((i) =>
             i.productId === product.productId
-              ? { ...i, quantity: i.quantity + 1, subtotal: calcSubtotal({ ...i, quantity: i.quantity + 1 }) }
+              ? { ...i, quantity: nextQty, subtotal: calcSubtotal({ ...i, quantity: nextQty }) }
               : i
           ),
         }
       }
-      const newItem: CartItem = { ...product, quantity: 1, discountAmount: 0, subtotal: product.sellPrice }
+      const newItem: CartItem = {
+        ...product,
+        quantity: incomingQty,
+        discountAmount: product.discountAmount ?? 0,
+        subtotal: calcSubtotal({ ...product, quantity: incomingQty, discountAmount: product.discountAmount ?? 0, subtotal: 0 }),
+      }
       return { items: [...state.items, newItem] }
     })
   },
@@ -93,11 +103,33 @@ export const useCartStore = create<CartState>((set, get) => ({
   },
 
   setCustomer: (customerId, customerName, hasDebt, outstandingDebt) => {
-    set({ customerId, customerName, customerHasDebt: hasDebt, customerOutstandingDebt: outstandingDebt })
+    set({
+      customerId,
+      customerName,
+      customerHasDebt: hasDebt,
+      customerOutstandingDebt: outstandingDebt,
+      walkInSelected: false,
+    })
+  },
+
+  setWalkIn: () => {
+    set({
+      customerId: null,
+      customerName: "Walk-in",
+      customerHasDebt: false,
+      customerOutstandingDebt: 0,
+      walkInSelected: true,
+    })
   },
 
   clearCustomer: () => {
-    set({ customerId: null, customerName: null, customerHasDebt: false, customerOutstandingDebt: 0 })
+    set({
+      customerId: null,
+      customerName: null,
+      customerHasDebt: false,
+      customerOutstandingDebt: 0,
+      walkInSelected: false,
+    })
   },
 
   setDiscount: (amount) => set({ discountAmount: amount }),
@@ -111,6 +143,7 @@ export const useCartStore = create<CartState>((set, get) => ({
       customerName: null,
       customerHasDebt: false,
       customerOutstandingDebt: 0,
+      walkInSelected: false,
       discountAmount: 0,
       paymentMethod: "CASH",
       paidAmount: 0,
@@ -126,5 +159,5 @@ export const useCartStore = create<CartState>((set, get) => ({
     if (overpay <= 0) return 0
     return get().customerHasDebt ? 0 : overpay
   },
-  isWalkIn: () => get().customerId === null,
+  isWalkIn: () => get().walkInSelected,
 }))

@@ -16,8 +16,8 @@ interface Customer {
 
 export function CustomerSelect() {
   const {
-    customerId, customerName, customerHasDebt, customerOutstandingDebt,
-    setCustomer, clearCustomer,
+    customerId, customerName, customerHasDebt, customerOutstandingDebt, walkInSelected,
+    setCustomer, setWalkIn, clearCustomer,
   } = useCartStore()
 
   const [search, setSearch] = useState("")
@@ -72,8 +72,7 @@ export function CustomerSelect() {
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    // +1 for walk-in option at index 0
-    const total = results.length + 1
+    const total = results.length
     if (!showDropdown) return
     if (e.key === "ArrowDown") {
       e.preventDefault()
@@ -83,8 +82,7 @@ export function CustomerSelect() {
       setActiveIndex((prev) => Math.max(prev - 1, 0))
     } else if (e.key === "Enter") {
       e.preventDefault()
-      if (activeIndex === 0) { handleClear(); return }
-      const customer = results[activeIndex - 1]
+      const customer = results[activeIndex]
       if (customer) handleSelect(customer)
     } else if (e.key === "Escape") {
       setShowDropdown(false)
@@ -93,7 +91,7 @@ export function CustomerSelect() {
   }
 
   // Customer sudah dipilih
-  if (customerId) {
+  if (customerId || walkInSelected) {
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-3 py-2.5">
@@ -102,7 +100,7 @@ export function CustomerSelect() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold truncate">{customerName}</p>
-            <p className="text-xs text-muted-foreground">Customer terdaftar</p>
+            <p className="text-xs text-muted-foreground">{walkInSelected ? "UI-only Walk-in" : "Customer terdaftar"}</p>
           </div>
           <Button
             variant="ghost"
@@ -152,6 +150,17 @@ export function CustomerSelect() {
         />
       </div>
 
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="mt-2 h-8 text-xs"
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => setWalkIn()}
+      >
+        Pilih Walk-in (UI)
+      </Button>
+
       {/* Dropdown — fixed positioning agar tidak terpotong card */}
       {showDropdown && (
         <div className="absolute left-0 right-0 mt-1 bg-background border rounded-lg shadow-xl overflow-hidden"
@@ -159,26 +168,6 @@ export function CustomerSelect() {
           ref={listRef}
           role="listbox"
         >
-          {/* Walk-in option */}
-          <button
-            type="button"
-            role="option"
-            aria-selected={activeIndex === 0}
-            className={`w-full text-left px-3 py-2.5 text-sm transition-colors border-b flex items-center gap-2 ${
-              activeIndex === 0 ? "bg-accent text-accent-foreground" : "hover:bg-muted"
-            }`}
-            onMouseDown={(e) => { e.preventDefault(); handleClear() }}
-            onMouseEnter={() => setActiveIndex(0)}
-          >
-            <div className="flex h-6 w-6 items-center justify-center rounded-full bg-muted shrink-0">
-              <User className="h-3.5 w-3.5 text-muted-foreground" />
-            </div>
-            <div>
-              <span className="font-medium">Walk-in</span>
-              <span className="text-xs text-muted-foreground ml-2">Bayar lunas · tanpa hutang</span>
-            </div>
-          </button>
-
           {isLoading && (
             <div className="px-3 py-2.5 text-xs text-muted-foreground">Mencari...</div>
           )}
@@ -192,12 +181,12 @@ export function CustomerSelect() {
               key={c.id}
               type="button"
               role="option"
-              aria-selected={activeIndex === i + 1}
+              aria-selected={activeIndex === i}
               className={`w-full text-left px-3 py-2.5 text-sm transition-colors flex items-center gap-2 border-b last:border-0 ${
-                activeIndex === i + 1 ? "bg-accent text-accent-foreground" : "hover:bg-muted"
+                activeIndex === i ? "bg-accent text-accent-foreground" : "hover:bg-muted"
               }`}
               onMouseDown={(e) => { e.preventDefault(); handleSelect(c) }}
-              onMouseEnter={() => setActiveIndex(i + 1)}
+              onMouseEnter={() => setActiveIndex(i)}
             >
               <div className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/10 shrink-0">
                 <User className="h-3.5 w-3.5 text-primary" />
@@ -218,7 +207,7 @@ export function CustomerSelect() {
       )}
 
       <p className="text-xs text-muted-foreground mt-1.5">
-        Kosongkan untuk transaksi walk-in
+        Customer wajib dipilih (atau pilih Walk-in mode UI)
       </p>
     </div>
   )
