@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { Suspense, useState, useEffect } from "react"
 import { Plus, AlertTriangle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PageWrapper } from "@/components/layout/PageWrapper"
@@ -12,7 +12,7 @@ import type { CreateProductInput, EditProductInput } from "@/features/products/s
 
 interface Category { id: string; name: string }
 
-export default function ProductsPage() {
+function ProductsPageContent() {
   const toast = useToast()
   const { data, meta, isLoading, filters, setFilter, setPage, refetch } = useProducts()
   const [categories, setCategories] = useState<Category[]>([])
@@ -100,5 +100,13 @@ export default function ProductsPage() {
         mode="create"
       />
     </PageWrapper>
+  )
+}
+
+export default function ProductsPage() {
+  return (
+    <Suspense fallback={<PageWrapper title="Produk"><div className="min-h-24" /></PageWrapper>}>
+      <ProductsPageContent />
+    </Suspense>
   )
 }
