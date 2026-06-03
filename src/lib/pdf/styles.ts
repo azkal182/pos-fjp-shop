@@ -1,5 +1,8 @@
 import { StyleSheet, Font } from "@react-pdf/renderer"
 
+// F4/Folio: 215.9mm x 330.2mm, dikonversi ke point PDF (72pt/inch).
+export const PDF_PAGE_SIZE_F4: [number, number] = [612, 936]
+
 // ── Warna brand ───────────────────────────────────────────────────────────────
 export const COLORS = {
   primary: "#1e40af",       // biru tua

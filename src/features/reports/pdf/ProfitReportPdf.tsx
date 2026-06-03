@@ -1,5 +1,5 @@
 import { Document, Page, View, Text } from "@react-pdf/renderer"
-import { shared, COLORS, formatRp, formatPct } from "@/lib/pdf/styles"
+import { PDF_PAGE_SIZE_F4, shared, COLORS, formatRp, formatPct } from "@/lib/pdf/styles"
 import { PdfHeader } from "@/lib/pdf/PdfHeader"
 import { PdfFooter } from "@/lib/pdf/PdfFooter"
 import { format } from "date-fns"
@@ -23,7 +23,7 @@ export function ProfitReportPdf({
 
   return (
     <Document title={`Laporan Profit — ${storeName}`} author={storeName} subject="Laporan Profit & Rugi">
-      <Page size="A4" style={shared.page}>
+      <Page size={PDF_PAGE_SIZE_F4} style={shared.page}>
         <PdfHeader
           storeName={storeName}
           storeAddress={storeAddress}

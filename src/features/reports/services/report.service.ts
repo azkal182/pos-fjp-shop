@@ -1,9 +1,18 @@
 import { prisma } from "@/lib/prisma"
-import { format, startOfWeek, subDays } from "date-fns"
+import { addDays, differenceInCalendarDays, format, startOfWeek, subDays } from "date-fns"
 import { startOfDayWIB, endOfDayWIB, formatDateWIB, parseDateWIB } from "@/lib/timezone"
+import { ValidationError } from "@/lib/exceptions"
 import { getAgingCategories } from "@/features/debts/services/debt-aging.service"
 import { classifyDebtClient } from "@/features/debts/utils/aging.utils"
-import type { SalesReport, ProductReportItem, DebtReport, ProfitReport } from "../types/report.types"
+import type {
+  DebtReport,
+  PartyProductMatrixReport,
+  PartyProductMatrixRow,
+  PartyProductReportType,
+  ProductReportItem,
+  ProfitReport,
+  SalesReport,
+} from "../types/report.types"
 
 function parseDate(d?: string): Date | undefined {
   return d ? parseDateWIB(d) : undefined
@@ -175,6 +184,140 @@ export async function getProductReport(
   }
 
   return Array.from(grouped.values()).sort((a, b) => b.totalRevenue - a.totalRevenue)
+}
+
+function getReportDates(from: Date, to: Date): string[] {
+  const dayCount = differenceInCalendarDays(startOfDayWIB(to), startOfDayWIB(from)) + 1
+  if (dayCount < 1) throw new ValidationError("Rentang tanggal tidak valid")
+  if (dayCount > 31) throw new ValidationError("Rentang tanggal maksimal 1 bulan")
+
+  return Array.from({ length: dayCount }, (_, i) => formatDateWIB(addDays(startOfDayWIB(from), i)))
+}
+
+function emptyQtyMap(dates: string[]) {
+  return Object.fromEntries(dates.map((date) => [date, 0])) as Record<string, number>
+}
+
+export async function getPartyProductMatrixReport(params: {
+  type: PartyProductReportType
+  partyId?: string
+  dateFrom?: string
+  dateTo?: string
+}): Promise<PartyProductMatrixReport> {
+  const from = parseDate(params.dateFrom) ?? subDays(new Date(), 29)
+  const to = parseDate(params.dateTo) ?? new Date()
+  const dates = getReportDates(from, to)
+  const fromBoundary = startOfDayWIB(from)
+  const toBoundary = endOfDayWIB(to)
+
+  if (params.type === "customer") {
+    const partyName = params.partyId
+      ? (await prisma.customer.findUnique({ where: { id: params.partyId }, select: { name: true } }))?.name ?? "Customer"
+      : "Semua Customer"
+
+    const items = await prisma.transactionItem.findMany({
+      where: {
+        transaction: {
+          confirmationStatus: "CONFIRMED",
+          transactionDate: { gte: fromBoundary, lte: toBoundary },
+          ...(params.partyId && { customerId: params.partyId }),
+        },
+      },
+      include: {
+        product: { select: { id: true, code: true, name: true, unit: true, stock: true } },
+        transaction: { select: { transactionDate: true } },
+      },
+    })
+
+    const grouped = new Map<string, PartyProductMatrixRow & { totalValue: number }>()
+    for (const item of items) {
+      const date = formatDateWIB(item.transaction.transactionDate)
+      const existing = grouped.get(item.productId) ?? {
+        productId: item.productId,
+        productCode: item.product.code,
+        productName: item.productName || item.product.name,
+        unit: item.product.unit,
+        stock: item.product.stock,
+        averagePrice: 0,
+        totalQty: 0,
+        quantitiesByDate: emptyQtyMap(dates),
+        totalValue: 0,
+      }
+      existing.quantitiesByDate[date] = (existing.quantitiesByDate[date] ?? 0) + item.quantity
+      existing.totalQty += item.quantity
+      existing.totalValue += Number(item.subtotal)
+      grouped.set(item.productId, existing)
+    }
+
+    const rows = Array.from(grouped.values()).map(({ totalValue, ...row }) => ({
+      ...row,
+      averagePrice: row.totalQty > 0 ? totalValue / row.totalQty : 0,
+    })).sort((a, b) => a.productName.localeCompare(b.productName))
+
+    return {
+      type: "customer",
+      partyId: params.partyId ?? null,
+      partyName,
+      dateFrom: dates[0],
+      dateTo: dates[dates.length - 1],
+      dates,
+      rows,
+      totalQty: rows.reduce((s, r) => s + r.totalQty, 0),
+    }
+  }
+
+  const partyName = params.partyId
+    ? (await prisma.vendor.findUnique({ where: { id: params.partyId }, select: { name: true } }))?.name ?? "Vendor"
+    : "Semua Vendor"
+
+  const items = await prisma.purchaseItem.findMany({
+    where: {
+      purchase: {
+        purchaseDate: { gte: fromBoundary, lte: toBoundary },
+        ...(params.partyId && { vendorId: params.partyId }),
+      },
+    },
+    include: {
+      product: { select: { id: true, code: true, name: true, unit: true, stock: true } },
+      purchase: { select: { purchaseDate: true } },
+    },
+  })
+
+  const grouped = new Map<string, PartyProductMatrixRow & { totalValue: number }>()
+  for (const item of items) {
+    const date = formatDateWIB(item.purchase.purchaseDate)
+    const existing = grouped.get(item.productId) ?? {
+      productId: item.productId,
+      productCode: item.product.code,
+      productName: item.product.name,
+      unit: item.product.unit,
+      stock: item.product.stock,
+      averagePrice: 0,
+      totalQty: 0,
+      quantitiesByDate: emptyQtyMap(dates),
+      totalValue: 0,
+    }
+    existing.quantitiesByDate[date] = (existing.quantitiesByDate[date] ?? 0) + item.quantity
+    existing.totalQty += item.quantity
+    existing.totalValue += Number(item.subtotal)
+    grouped.set(item.productId, existing)
+  }
+
+  const rows = Array.from(grouped.values()).map(({ totalValue, ...row }) => ({
+    ...row,
+    averagePrice: row.totalQty > 0 ? totalValue / row.totalQty : 0,
+  })).sort((a, b) => a.productName.localeCompare(b.productName))
+
+  return {
+    type: "vendor",
+    partyId: params.partyId ?? null,
+    partyName,
+    dateFrom: dates[0],
+    dateTo: dates[dates.length - 1],
+    dates,
+    rows,
+    totalQty: rows.reduce((s, r) => s + r.totalQty, 0),
+  }
 }
 
 // ─── Debt Report ──────────────────────────────────────────────────────────────

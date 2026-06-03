@@ -1,5 +1,5 @@
 import { Document, Page, View, Text, Image } from "@react-pdf/renderer"
-import { shared, COLORS, formatRp } from "@/lib/pdf/styles"
+import { PDF_PAGE_SIZE_F4, shared, COLORS, formatRp } from "@/lib/pdf/styles"
 import { PdfFooter } from "@/lib/pdf/PdfFooter"
 import { format } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
@@ -58,7 +58,7 @@ export function TransactionPdf({
 
   return (
     <Document title={`Invoice ${transaction.code} — ${storeName}`} author={storeName}>
-      <Page size="A5" style={[shared.page, { paddingHorizontal: 30, paddingTop: 30 }]}>
+      <Page size={PDF_PAGE_SIZE_F4} style={[shared.page, { paddingHorizontal: 40, paddingTop: 40 }]}>
         {/* Header toko */}
         <View style={{ alignItems: "center", marginBottom: 16, paddingBottom: 12, borderBottomWidth: 1.5, borderBottomColor: COLORS.primary }}>
           {logoUrl && (

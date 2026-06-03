@@ -36,6 +36,30 @@ export interface ProductReportItem {
   totalProfit: number    // gross profit (revenue - HPP)
 }
 
+export type PartyProductReportType = "customer" | "vendor"
+
+export interface PartyProductMatrixRow {
+  productId: string
+  productCode: string
+  productName: string
+  unit: string
+  stock: number
+  averagePrice: number
+  totalQty: number
+  quantitiesByDate: Record<string, number>
+}
+
+export interface PartyProductMatrixReport {
+  type: PartyProductReportType
+  partyId: string | null
+  partyName: string
+  dateFrom: string
+  dateTo: string
+  dates: string[]
+  rows: PartyProductMatrixRow[]
+  totalQty: number
+}
+
 // ─── Debt Report ──────────────────────────────────────────────────────────────
 
 export interface DebtReportBucket {
