@@ -402,6 +402,8 @@ Digunakan untuk menampilkan badge aging hutang:
   Query: `dateFrom`, `dateTo`
 - `GET /api/export/report/party-products`
   Query sama seperti `party-products`, menghasilkan PDF
+- `GET /api/export/customers/:id/product-history`
+  Query: `dateFrom`, `dateTo`; default 30 hari terakhir. PDF berisi riwayat item yang dibeli customer, dengan biaya packing dan diskon transaksi sebagai baris terpisah.
 
 ### Mobile flow
 - Tampilan filter periode
@@ -525,6 +527,7 @@ Response: `{ success: true, data: { url, key }}`
 - `GET /api/reports/debts`
 - `GET /api/reports/profit`
 - `GET /api/export/report/party-products`
+- `GET /api/export/customers/:id/product-history`
 
 ### Settings & utilities
 - `GET /api/settings`

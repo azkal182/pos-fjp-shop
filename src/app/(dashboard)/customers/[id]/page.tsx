@@ -2,11 +2,18 @@
 
 import { useEffect, useState } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { ArrowLeft, Pencil, User, Phone, MapPin } from "lucide-react"
+import { ArrowLeft, Download, Pencil, User, Phone, MapPin } from "lucide-react"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Separator } from "@/components/ui/separator"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageWrapper } from "@/components/layout/PageWrapper"
 import { CustomerDebtSummary } from "@/features/customers/components/CustomerDebtSummary"
@@ -17,8 +24,9 @@ import { DataTable, type Column } from "@/components/shared/DataTable"
 import { StatusBadge } from "@/components/shared/StatusBadge"
 import { CurrencyDisplay } from "@/components/shared/CurrencyDisplay"
 import { LoadingSpinner } from "@/components/shared/LoadingSpinner"
+import { DateRangePicker } from "@/components/shared/DateRangePicker"
 import { useToast } from "@/hooks/useToast"
-import { format } from "date-fns"
+import { format, subDays } from "date-fns"
 import { id as idLocale } from "date-fns/locale"
 import type { CreateCustomerInput } from "@/features/customers/schemas/customer.schema"
 
@@ -60,6 +68,11 @@ export default function CustomerDetailPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isPayOpen, setIsPayOpen] = useState(false)
+  const [isExportOpen, setIsExportOpen] = useState(false)
+  const [exportRange, setExportRange] = useState<{ from?: Date; to?: Date }>(() => ({
+    from: subDays(new Date(), 29),
+    to: new Date(),
+  }))
   const [isUpdating, setIsUpdating] = useState(false)
   const [refreshKey, setRefreshKey] = useState(0)
 
@@ -96,6 +109,17 @@ export default function CustomerDetailPage() {
     } finally {
       setIsUpdating(false)
     }
+  }
+
+  function handleExportPdf() {
+    const from = exportRange.from ?? subDays(new Date(), 29)
+    const to = exportRange.to ?? new Date()
+    const query = new URLSearchParams({
+      dateFrom: format(from, "yyyy-MM-dd"),
+      dateTo: format(to, "yyyy-MM-dd"),
+    })
+    window.open(`/api/export/customers/${id}/product-history?${query.toString()}`, "_blank")
+    setIsExportOpen(false)
   }
 
   const transactionColumns: Column<Transaction>[] = [
@@ -170,10 +194,14 @@ export default function CustomerDetailPage() {
   return (
     <PageWrapper
       actions={
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => router.back()}>
             <ArrowLeft className="h-4 w-4 mr-2" />
             Kembali
+          </Button>
+          <Button variant="outline" onClick={() => setIsExportOpen(true)}>
+            <Download className="h-4 w-4 mr-2" />
+            Export PDF
           </Button>
           <Button onClick={() => setIsEditOpen(true)}>
             <Pencil className="h-4 w-4 mr-2" />
@@ -317,6 +345,38 @@ export default function CustomerDetailPage() {
           setRefreshKey((k) => k + 1)
         }}
       />
+
+      <Dialog open={isExportOpen} onOpenChange={setIsExportOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Export Riwayat Belanja</DialogTitle>
+            <DialogDescription>
+              Pilih rentang tanggal transaksi customer. Default laporan adalah 30 hari terakhir.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <DateRangePicker
+              value={exportRange}
+              onChange={setExportRange}
+              className="w-full"
+            />
+            <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground leading-relaxed">
+              PDF akan menampilkan item yang dibeli customer. Biaya packing dan diskon transaksi dicetak sebagai baris terpisah agar total laporan tetap sesuai invoice.
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsExportOpen(false)}>
+              Batal
+            </Button>
+            <Button onClick={handleExportPdf}>
+              <Download className="h-4 w-4 mr-2" />
+              Export PDF
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </PageWrapper>
   )
 }
