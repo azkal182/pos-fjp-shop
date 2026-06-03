@@ -14,6 +14,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { PageWrapper } from "@/components/layout/PageWrapper"
 import { CustomerDebtSummary } from "@/features/customers/components/CustomerDebtSummary"
@@ -58,6 +65,8 @@ interface CustomerDetail {
   debts: ActiveDebt[]
 }
 
+type CustomerExportType = "product-history" | "debt-book"
+
 export default function CustomerDetailPage() {
   const params = useParams()
   const router = useRouter()
@@ -69,6 +78,7 @@ export default function CustomerDetailPage() {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isPayOpen, setIsPayOpen] = useState(false)
   const [isExportOpen, setIsExportOpen] = useState(false)
+  const [exportType, setExportType] = useState<CustomerExportType>("product-history")
   const [exportRange, setExportRange] = useState<{ from?: Date; to?: Date }>(() => ({
     from: subDays(new Date(), 29),
     to: new Date(),
@@ -118,7 +128,8 @@ export default function CustomerDetailPage() {
       dateFrom: format(from, "yyyy-MM-dd"),
       dateTo: format(to, "yyyy-MM-dd"),
     })
-    window.open(`/api/export/customers/${id}/product-history?${query.toString()}`, "_blank")
+    const endpoint = exportType === "debt-book" ? "debt-book" : "product-history"
+    window.open(`/api/export/customers/${id}/${endpoint}?${query.toString()}`, "_blank")
     setIsExportOpen(false)
   }
 
@@ -349,20 +360,37 @@ export default function CustomerDetailPage() {
       <Dialog open={isExportOpen} onOpenChange={setIsExportOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Export Riwayat Belanja</DialogTitle>
+            <DialogTitle>Export PDF Customer</DialogTitle>
             <DialogDescription>
-              Pilih rentang tanggal transaksi customer. Default laporan adalah 30 hari terakhir.
+              Pilih jenis laporan dan rentang tanggal. Default laporan adalah 30 hari terakhir.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
-            <DateRangePicker
-              value={exportRange}
-              onChange={setExportRange}
-              className="w-full"
-            />
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Jenis Laporan</label>
+              <Select value={exportType} onValueChange={(value) => setExportType(value as CustomerExportType)}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Pilih jenis laporan" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="product-history">Riwayat Transaksi / Belanja</SelectItem>
+                  <SelectItem value="debt-book">Buku Hutang Customer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Rentang Tanggal</label>
+              <DateRangePicker
+                value={exportRange}
+                onChange={setExportRange}
+                className="w-full"
+              />
+            </div>
             <div className="rounded-lg border bg-muted/30 p-3 text-xs text-muted-foreground leading-relaxed">
-              PDF akan menampilkan item yang dibeli customer. Biaya packing dan diskon transaksi dicetak sebagai baris terpisah agar total laporan tetap sesuai invoice.
+              {exportType === "debt-book"
+                ? "PDF akan menampilkan mutasi buku hutang dengan saldo awal, tambah/kurangi saldo, dan saldo akhir. Saldo positif berarti hutang, saldo negatif berarti deposit customer."
+                : "PDF akan menampilkan item yang dibeli customer. Biaya packing dan diskon transaksi dicetak sebagai baris terpisah agar total laporan tetap sesuai invoice."}
             </div>
           </div>
 

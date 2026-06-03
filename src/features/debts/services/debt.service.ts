@@ -2,6 +2,9 @@ import type { PrismaClient } from "@/generated/prisma"
 import { prisma as globalPrisma } from "@/lib/prisma"
 import { log } from "@/lib/logger"
 import { addEntry } from "@/features/ledger/services/ledger.service"
+import { subDays } from "date-fns"
+import { endOfDayWIB, formatDateWIB, parseDateWIB, startOfDayWIB } from "@/lib/timezone"
+import { NotFoundError } from "@/lib/exceptions"
 import type { AllocationResult, DebtAllocation, FifoPreview } from "../types/debt.types"
 
 type TxClient = Omit<
@@ -403,5 +406,195 @@ export async function getCustomerLedger(customerId: string) {
       .filter((u) => u.usageType === "PAYMENT" || u.usageType === "RETURN")
       .reduce((s, u) => s + Number(u.amount), 0),
     currentBalance: balance,
+  }
+}
+
+export interface CustomerDebtBookReportParams {
+  customerId: string
+  dateFrom?: string
+  dateTo?: string
+}
+
+export type CustomerDebtBookEntryType =
+  | "DEBT"
+  | "PAYMENT"
+  | "DEPOSIT_IN"
+  | "DEPOSIT_OUT"
+  | "DEPOSIT_RETURN"
+
+export interface CustomerDebtBookRow {
+  id: string
+  date: Date
+  type: CustomerDebtBookEntryType
+  description: string
+  humanDescription: string
+  reference: string
+  increase: number
+  decrease: number
+  balance: number
+  notes?: string
+  allocationSummary?: string
+  invoiceDetails?: {
+    items: {
+      productName: string
+      productCode: string | null
+      quantity: number
+      unit: string | null
+      price: number
+      subtotal: number
+    }[]
+    subtotal: number
+    discountAmount: number
+    packingFee: number
+    totalAmount: number
+  }
+}
+
+export interface CustomerDebtBookReport {
+  customer: {
+    id: string
+    name: string
+    phone: string | null
+    address: string | null
+  }
+  dateFrom: string
+  dateTo: string
+  openingBalance: number
+  closingBalance: number
+  rows: CustomerDebtBookRow[]
+  summary: {
+    totalIncrease: number
+    totalDecrease: number
+    totalDebt: number
+    totalPayment: number
+    totalDepositIn: number
+    totalDepositOut: number
+  }
+}
+
+function describeCustomerLedgerEntry(entry: {
+  type: CustomerDebtBookEntryType
+  description: string
+}): string {
+  switch (entry.type) {
+    case "DEBT":
+      return entry.description.replace(/^Hutang dari transaksi /, "Tagihan penjualan ")
+    case "PAYMENT":
+      return entry.description.includes("Overpay POS")
+        ? entry.description.replace("Overpay POS", "Pembayaran dari kelebihan bayar POS")
+        : "Pembayaran hutang"
+    case "DEPOSIT_IN":
+      return "Deposit masuk / saldo kredit customer"
+    case "DEPOSIT_OUT":
+      return "Deposit dipakai untuk pembayaran"
+    case "DEPOSIT_RETURN":
+      return "Deposit dikembalikan ke customer"
+  }
+}
+
+export async function getCustomerDebtBookReport({
+  customerId,
+  dateFrom,
+  dateTo,
+}: CustomerDebtBookReportParams): Promise<CustomerDebtBookReport> {
+  const customer = await globalPrisma.customer.findUnique({
+    where: { id: customerId },
+    select: { id: true, name: true, phone: true, address: true },
+  })
+  if (!customer) throw new NotFoundError("Customer")
+
+  const fallbackTo = new Date()
+  const fallbackFrom = subDays(fallbackTo, 29)
+  const from = dateFrom ? parseDateWIB(dateFrom) : fallbackFrom
+  const to = dateTo ? parseDateWIB(dateTo) : fallbackTo
+  const fromBoundary = startOfDayWIB(from)
+  const toBoundary = endOfDayWIB(to)
+
+  const ledgerData = await getCustomerLedger(customerId)
+  const allEntries = ledgerData.ledger
+  const beforeRange = allEntries.filter((entry) => entry.date < fromBoundary)
+  const openingBalance = beforeRange.length > 0 ? beforeRange[beforeRange.length - 1].balance : 0
+  const entriesInRange = allEntries.filter(
+    (entry) => entry.date >= fromBoundary && entry.date <= toBoundary
+  )
+  const debtIdsInRange = entriesInRange
+    .filter((entry) => entry.type === "DEBT")
+    .map((entry) => entry.id)
+  const debtDetails = debtIdsInRange.length
+    ? await globalPrisma.debt.findMany({
+        where: { id: { in: debtIdsInRange } },
+        include: {
+          transaction: {
+            include: {
+              items: {
+                include: {
+                  product: { select: { code: true, unit: true } },
+                },
+                orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+              },
+            },
+          },
+        },
+      })
+    : []
+  const debtDetailById = new Map(debtDetails.map((debt) => [debt.id, debt]))
+
+  const rows: CustomerDebtBookRow[] = entriesInRange.map((entry) => {
+    const allocations = entry.meta?.allocations as { debtCode: string; amount: number }[] | undefined
+    const debtDetail = entry.type === "DEBT" ? debtDetailById.get(entry.id) : undefined
+    return {
+      id: entry.id,
+      date: entry.date,
+      type: entry.type,
+      description: entry.description,
+      humanDescription: describeCustomerLedgerEntry(entry),
+      reference: entry.reference,
+      increase: entry.debit,
+      decrease: entry.credit,
+      balance: entry.balance,
+      notes: entry.meta?.notes,
+      allocationSummary: allocations?.length
+        ? allocations.map((a) => `${a.debtCode}: Rp ${Number(a.amount).toLocaleString("id-ID")}`).join("; ")
+        : undefined,
+      invoiceDetails: debtDetail
+        ? {
+            items: debtDetail.transaction.items.map((item) => ({
+              productName: item.productName,
+              productCode: item.product?.code ?? null,
+              quantity: Number(item.quantity),
+              unit: item.product?.unit ?? null,
+              price: Number(item.sellPrice) - Number(item.discountAmount),
+              subtotal: Number(item.subtotal),
+            })),
+            subtotal: Number(debtDetail.transaction.subtotal),
+            discountAmount: Number(debtDetail.transaction.discountAmount),
+            packingFee: Number(debtDetail.transaction.packingFee),
+            totalAmount: Number(debtDetail.transaction.totalAmount),
+          }
+        : undefined,
+    }
+  })
+
+  const totalIncrease = rows.reduce((sum, row) => sum + row.increase, 0)
+  const totalDecrease = rows.reduce((sum, row) => sum + row.decrease, 0)
+  const closingBalance = rows.length > 0 ? rows[rows.length - 1].balance : openingBalance
+
+  return {
+    customer,
+    dateFrom: formatDateWIB(fromBoundary),
+    dateTo: formatDateWIB(startOfDayWIB(to)),
+    openingBalance,
+    closingBalance,
+    rows,
+    summary: {
+      totalIncrease,
+      totalDecrease,
+      totalDebt: rows.filter((row) => row.type === "DEBT").reduce((sum, row) => sum + row.increase, 0),
+      totalPayment: rows.filter((row) => row.type === "PAYMENT").reduce((sum, row) => sum + row.decrease, 0),
+      totalDepositIn: rows.filter((row) => row.type === "DEPOSIT_IN").reduce((sum, row) => sum + row.decrease, 0),
+      totalDepositOut: rows
+        .filter((row) => row.type === "DEPOSIT_OUT" || row.type === "DEPOSIT_RETURN")
+        .reduce((sum, row) => sum + row.increase, 0),
+    },
   }
 }
