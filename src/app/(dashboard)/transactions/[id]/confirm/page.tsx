@@ -29,8 +29,11 @@ interface EditableItem {
   productCode?: string
   unit?: string
   quantity: number
+  originalQuantity: number
   sellPrice: number
   discountAmount: number
+  stock: number
+  reservedStock: number
 }
 
 interface ProductResult {
@@ -77,6 +80,10 @@ function formatShort(amount: number): string {
   if (amount >= 1_000_000) return `${(amount / 1_000_000).toFixed(amount % 1_000_000 === 0 ? 0 : 1)}jt`
   if (amount >= 1_000) return `${(amount / 1_000).toFixed(amount % 1_000 === 0 ? 0 : 1)}rb`
   return amount.toLocaleString("id-ID")
+}
+
+function getAvailableQty(item: EditableItem): number {
+  return Math.max(0, item.stock - item.reservedStock + item.originalQuantity)
 }
 
 // ── ProductSearch mini untuk tambah produk ────────────────────────────────────
@@ -224,7 +231,19 @@ export default function ConfirmTransactionPage() {
           return
         }
         setTransaction(trx)
-        setEditItems(trx.items.map((i: EditableItem) => ({ ...i })))
+        setEditItems(trx.items.map((i: any) => ({
+          id: i.id,
+          productId: i.productId,
+          productName: i.productName,
+          productCode: i.product?.code,
+          unit: i.product?.unit,
+          quantity: Number(i.quantity),
+          originalQuantity: Number(i.quantity),
+          sellPrice: Number(i.sellPrice),
+          discountAmount: Number(i.discountAmount),
+          stock: Number(i.product?.stock ?? 0),
+          reservedStock: Number(i.product?.reservedStock ?? 0),
+        })))
         setDiscount(Number(trx.discountAmount))
         if (trx.customerId) {
           fetch(`/api/customers/${trx.customerId}/deposit`)
@@ -243,7 +262,9 @@ export default function ConfirmTransactionPage() {
   const subtotal = editItems.reduce(
     (s, i) => s + (i.sellPrice - i.discountAmount) * i.quantity, 0
   )
-  const totalAmount = subtotal - discount + packingFee
+  const appliedDiscount = Math.min(discount, Math.max(0, subtotal))
+  const isDiscountAdjusted = discount > appliedDiscount
+  const totalAmount = subtotal - appliedDiscount + packingFee
   const paid = paidAmount === "" ? 0 : paidAmount
   const depositUsed = depositInfo
     ? Math.min(depositInfo.totalBalance, Math.max(0, totalAmount - paid))
@@ -255,17 +276,28 @@ export default function ConfirmTransactionPage() {
   const isWalkIn = !transaction.customerId
   const isAllDebt = paidAmount === "" && !isWalkIn && depositUsed <= 0
   const cashLabel = paidAmount === "" ? 0 : paid
-  const suggests = generateSuggests(totalAmount)
+  const suggests = totalAmount > 0 ? generateSuggests(totalAmount) : []
 
-  const canConfirm = !isSubmitting && editItems.length > 0 && (
+  const canConfirm = !isSubmitting && !isEditMode && editItems.length > 0 && totalAmount > 0 && (
     isWalkIn
       ? debtAmount <= 0 // walk-in wajib lunas (termasuk jika lunas via nominal bayar)
       : (isAllDebt || effectivePaid > 0) // customer boleh hutang, atau terbayar oleh tunai/deposit
   )
 
   function updateQty(idx: number, qty: number) {
+    const item = editItems[idx]
+    if (!item) return
+    const available = getAvailableQty(item)
+    if (available <= 0) {
+      toast.error(`Stok ${item.productName} tidak tersedia`)
+      return
+    }
+    const nextQty = Math.max(1, Math.min(qty, available))
+    if (qty > available) {
+      toast.error(`Stok ${item.productName} tidak cukup. Tersedia: ${available}`)
+    }
     setEditItems((prev) => prev.map((item, i) =>
-      i === idx ? { ...item, quantity: Math.max(1, qty) } : item
+      i === idx ? { ...item, quantity: nextQty } : item
     ))
   }
 
@@ -277,10 +309,21 @@ export default function ConfirmTransactionPage() {
     // Jika produk sudah ada, tambah qty
     const existing = editItems.findIndex((i) => i.productId === p.id)
     if (existing >= 0) {
+      const item = editItems[existing]
+      const available = getAvailableQty(item)
+      if (item.quantity >= available) {
+        toast.error(`Stok ${item.productName} tidak cukup. Tersedia: ${available}`)
+        return
+      }
       setEditItems((prev) => prev.map((item, i) =>
         i === existing ? { ...item, quantity: item.quantity + 1 } : item
       ))
     } else {
+      const available = p.stock - (p.reservedStock ?? 0)
+      if (available <= 0) {
+        toast.error(`Stok ${p.name} habis`)
+        return
+      }
       setEditItems((prev) => [...prev, {
         id: `new-${p.id}`,
         productId: p.id,
@@ -288,8 +331,11 @@ export default function ConfirmTransactionPage() {
         productCode: p.code,
         unit: p.unit,
         quantity: 1,
+        originalQuantity: 0,
         sellPrice: p.sellPrice,
         discountAmount: 0,
+        stock: p.stock,
+        reservedStock: p.reservedStock ?? 0,
       }])
     }
   }
@@ -309,11 +355,12 @@ export default function ConfirmTransactionPage() {
               sellPrice: i.sellPrice,
               discountAmount: i.discountAmount,
             })),
-            discountAmount: discount,
+            discountAmount: appliedDiscount,
           }),
         })
         const json = await res.json()
         if (!res.ok) throw new Error(json.error ?? "Gagal menyimpan perubahan")
+        setDiscount(appliedDiscount)
         toast.success("Perubahan item berhasil disimpan")
         setIsEditMode(false)
       } catch (err) {
@@ -327,6 +374,14 @@ export default function ConfirmTransactionPage() {
   }
 
   async function handleConfirm() {
+    if (isEditMode) {
+      toast.error("Selesaikan edit item terlebih dahulu")
+      return
+    }
+    if (totalAmount <= 0) {
+      toast.error("Total transaksi harus lebih dari 0")
+      return
+    }
     if (isWalkIn && debtAmount > 0) {
       toast.error("Customer walk-in harus membayar lunas")
       return
@@ -356,7 +411,7 @@ export default function ConfirmTransactionPage() {
             sellPrice: i.sellPrice,
             discountAmount: i.discountAmount,
           })),
-          discountAmount: discount,
+          discountAmount: appliedDiscount,
         }),
       })
       const json = await res.json()
@@ -466,6 +521,7 @@ export default function ConfirmTransactionPage() {
               ) : (
                 editItems.map((item, idx) => {
                   const itemSubtotal = (item.sellPrice - item.discountAmount) * item.quantity
+                  const availableQty = getAvailableQty(item)
                   return (
                     <div
                       key={item.id}
@@ -488,6 +544,7 @@ export default function ConfirmTransactionPage() {
                         <Input
                           type="number"
                           min={1}
+                          max={availableQty}
                           value={item.quantity}
                           onChange={(e) => updateQty(idx, parseInt(e.target.value) || 1)}
                           onFocus={(e) => e.target.select()}
@@ -556,11 +613,16 @@ export default function ConfirmTransactionPage() {
                   min={0}
                   placeholder="0"
                   value={discount || ""}
-                  onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+                  onChange={(e) => setDiscount(Math.max(0, parseFloat(e.target.value) || 0))}
                   onFocus={(e) => e.target.select()}
                   className="pl-9 h-9"
                 />
               </div>
+              {isDiscountAdjusted && (
+                <p className="text-xs text-amber-600">
+                  Diskon akan disimpan sebagai <CurrencyDisplay amount={appliedDiscount} className="text-xs" /> karena subtotal berubah.
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -579,11 +641,16 @@ export default function ConfirmTransactionPage() {
                 <span className="text-muted-foreground">Subtotal produk</span>
                 <CurrencyDisplay amount={subtotal} />
               </div>
-              {discount > 0 && (
+              {appliedDiscount > 0 && (
                 <div className="flex justify-between text-red-600">
                   <span>Diskon</span>
-                  <span>−<CurrencyDisplay amount={discount} className="text-sm" /></span>
+                  <span>−<CurrencyDisplay amount={appliedDiscount} className="text-sm" /></span>
                 </div>
+              )}
+              {isDiscountAdjusted && (
+                <p className="text-xs text-amber-600">
+                  Diskon order dibatasi sebesar subtotal produk.
+                </p>
               )}
               {packingFee > 0 && (
                 <div className="flex justify-between text-blue-600">
@@ -805,6 +872,16 @@ export default function ConfirmTransactionPage() {
               }
             </Button>
 
+            {isEditMode && (
+              <p className="text-xs text-center text-amber-600">
+                Selesaikan edit item terlebih dahulu sebelum konfirmasi pembayaran.
+              </p>
+            )}
+            {!isEditMode && totalAmount <= 0 && (
+              <p className="text-xs text-center text-destructive">
+                Total transaksi harus lebih dari 0.
+              </p>
+            )}
             {isAllDebt && (
               <p className="text-xs text-center text-muted-foreground">
                 Seluruh tagihan akan dicatat sebagai hutang customer
@@ -859,11 +936,16 @@ export default function ConfirmTransactionPage() {
                 <span className="text-muted-foreground">Subtotal</span>
                 <CurrencyDisplay amount={subtotal} />
               </div>
-              {discount > 0 && (
+              {appliedDiscount > 0 && (
                 <div className="flex justify-between text-red-600">
                   <span>Diskon</span>
-                  <span>−<CurrencyDisplay amount={discount} className="text-sm" /></span>
+                  <span>−<CurrencyDisplay amount={appliedDiscount} className="text-sm" /></span>
                 </div>
+              )}
+              {isDiscountAdjusted && (
+                <p className="text-xs text-amber-600">
+                  Diskon order dibatasi sebesar subtotal produk.
+                </p>
               )}
               {packingFee > 0 && (
                 <div className="flex justify-between text-blue-600">

@@ -53,7 +53,7 @@ export async function getTransactionById(id: string) {
       customer: { select: { id: true, name: true, phone: true } },
       user: { select: { id: true, name: true } },
       items: {
-        include: { product: { select: { id: true, name: true, code: true, unit: true } } },
+        include: { product: { select: { id: true, name: true, code: true, unit: true, stock: true, reservedStock: true } } },
       },
       debt: {
         include: {

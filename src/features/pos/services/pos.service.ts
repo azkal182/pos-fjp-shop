@@ -158,6 +158,12 @@ export async function confirmTransaction(
         originalQty: i.quantity,
       }))
 
+  for (const item of finalItems) {
+    if (item.discountAmount > item.sellPrice) {
+      throw new ValidationError("Diskon item tidak boleh melebihi harga jual")
+    }
+  }
+
   // Validasi stok jika ada perubahan qty
   if (updatedItems) {
     for (const item of finalItems) {
@@ -181,9 +187,15 @@ export async function confirmTransaction(
     (sum, item) => sum + (item.sellPrice - item.discountAmount) * item.quantity,
     0
   )
+  if (finalDiscount > subtotal) {
+    throw new ValidationError("Diskon order tidak boleh melebihi subtotal produk")
+  }
   const customerId = existing.customerId
 
   const totalAmount = subtotal - finalDiscount + packingFee
+  if (totalAmount <= 0) {
+    throw new ValidationError("Total transaksi harus lebih dari 0")
+  }
   const availableDeposit = customerId
     ? await prisma.deposit.aggregate({
       where: { partyType: "CUSTOMER", partyId: customerId, balance: { gt: 0 } },

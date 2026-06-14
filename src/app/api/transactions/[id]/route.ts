@@ -54,6 +54,11 @@ export const PATCH = withHandler(async (req: NextRequest, ctx) => {
   }
 
   const { items, discountAmount } = parsed.data
+  for (const item of items) {
+    if (item.discountAmount > item.sellPrice) {
+      throw new ValidationError("Diskon item tidak boleh melebihi harga jual")
+    }
+  }
 
   await prisma.$transaction(async (tx) => {
     const oldQty = new Map<string, number>()
@@ -110,7 +115,13 @@ export const PATCH = withHandler(async (req: NextRequest, ctx) => {
     const subtotal = items.reduce(
       (s, i) => s + (i.sellPrice - i.discountAmount) * i.quantity, 0
     )
+    if (discountAmount > subtotal) {
+      throw new ValidationError("Diskon order tidak boleh melebihi subtotal produk")
+    }
     const totalAmount = subtotal - discountAmount
+    if (totalAmount <= 0) {
+      throw new ValidationError("Total transaksi harus lebih dari 0")
+    }
 
     for (const item of items) {
       const product = await tx.product.findUniqueOrThrow({
