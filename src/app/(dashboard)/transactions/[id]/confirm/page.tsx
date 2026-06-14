@@ -266,21 +266,22 @@ export default function ConfirmTransactionPage() {
   const isDiscountAdjusted = discount > appliedDiscount
   const totalAmount = subtotal - appliedDiscount + packingFee
   const paid = paidAmount === "" ? 0 : paidAmount
-  const depositUsed = depositInfo
-    ? Math.min(depositInfo.totalBalance, Math.max(0, totalAmount - paid))
-    : 0
-  const effectivePaid = paid + depositUsed
-  const debtAmount = Math.max(0, totalAmount - effectivePaid)
-  const overpayAmount = Math.max(0, effectivePaid - totalAmount)
-  const isFullPay = effectivePaid >= totalAmount && overpayAmount === 0
+  const depositBalance = depositInfo?.totalBalance ?? 0
+  const depositUsed = transaction.customerId ? Math.min(depositBalance, Math.max(0, totalAmount)) : 0
+  const cashDueAfterDeposit = Math.max(0, totalAmount - depositUsed)
+  const cashAppliedToInvoice = Math.min(paid, cashDueAfterDeposit)
+  const effectivePaid = depositUsed + cashAppliedToInvoice
+  const debtAmount = Math.max(0, cashDueAfterDeposit - paid)
+  const overpayAmount = Math.max(0, paid - cashDueAfterDeposit)
+  const isFullPay = debtAmount <= 0 && overpayAmount === 0
   const isWalkIn = !transaction.customerId
   const isAllDebt = paidAmount === "" && !isWalkIn && depositUsed <= 0
   const cashLabel = paidAmount === "" ? 0 : paid
-  const suggests = totalAmount > 0 ? generateSuggests(totalAmount) : []
+  const suggests = cashDueAfterDeposit > 0 ? generateSuggests(cashDueAfterDeposit) : []
 
   const canConfirm = !isSubmitting && !isEditMode && editItems.length > 0 && totalAmount > 0 && (
     isWalkIn
-      ? debtAmount <= 0 // walk-in wajib lunas (termasuk jika lunas via nominal bayar)
+      ? debtAmount <= 0 // walk-in wajib lunas
       : (isAllDebt || effectivePaid > 0) // customer boleh hutang, atau terbayar oleh tunai/deposit
   )
 
@@ -686,12 +687,24 @@ export default function ConfirmTransactionPage() {
 
             {/* Deposit customer */}
             {depositInfo && depositInfo.totalBalance > 0 && (
-              <div className="flex items-center gap-3 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 px-3 py-2.5">
-                <Wallet className="h-4 w-4 text-blue-600 shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">Deposit Tersedia</p>
-                  <CurrencyDisplay amount={depositInfo.totalBalance} className="text-sm font-bold text-blue-700 dark:text-blue-400" />
-                  <p className="text-[11px] text-blue-700/80 dark:text-blue-300/80">Otomatis dipakai terlebih dulu</p>
+              <div className="space-y-2 rounded-lg bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-900/50 px-3 py-2.5">
+                <div className="flex items-center gap-3">
+                  <Wallet className="h-4 w-4 text-blue-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-blue-700 dark:text-blue-400">Deposit Tersedia</p>
+                    <CurrencyDisplay amount={depositInfo.totalBalance} className="text-sm font-bold text-blue-700 dark:text-blue-400" />
+                    <p className="text-[11px] text-blue-700/80 dark:text-blue-300/80">Otomatis dipakai terlebih dulu</p>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div className="rounded-md bg-white/70 dark:bg-blue-950/30 px-2 py-1.5">
+                    <p className="text-blue-700/80 dark:text-blue-300/80">Dipakai transaksi ini</p>
+                    <CurrencyDisplay amount={depositUsed} className="text-xs font-bold text-blue-700 dark:text-blue-400" />
+                  </div>
+                  <div className="rounded-md bg-white/70 dark:bg-blue-950/30 px-2 py-1.5">
+                    <p className="text-blue-700/80 dark:text-blue-300/80">Sisa perlu dibayar</p>
+                    <CurrencyDisplay amount={cashDueAfterDeposit} className="text-xs font-bold text-blue-700 dark:text-blue-400" />
+                  </div>
                 </div>
               </div>
             )}
@@ -720,7 +733,7 @@ export default function ConfirmTransactionPage() {
                 <Label className="text-xs">Nominal Bayar</Label>
                 {!isWalkIn && (
                   <span className="text-xs text-muted-foreground">
-                    Kosong = tanpa tunai {depositUsed > 0 ? "(deposit tetap dipakai)" : "(jadi hutang jika tanpa deposit)"}
+                    Kosong = tanpa tunai {depositUsed > 0 ? "(deposit tetap dipakai)" : "(jadi hutang jika kurang)"}
                   </span>
                 )}
               </div>
@@ -730,7 +743,7 @@ export default function ConfirmTransactionPage() {
                   ref={paidInputRef}
                   type="number"
                   min={0}
-                  placeholder={isWalkIn ? "Wajib diisi" : "Kosong/0 = tanpa tunai"}
+                  placeholder={cashDueAfterDeposit <= 0 ? "Opsional, akan jadi kelebihan" : isWalkIn ? "Wajib diisi" : "Kosong/0 = tanpa tunai"}
                   value={paidAmount === "" ? "" : paidAmount}
                   onChange={(e) => setPaidAmount(e.target.value === "" ? "" : parseFloat(e.target.value) || 0)}
                   onFocus={(e) => e.target.select()}
@@ -749,7 +762,7 @@ export default function ConfirmTransactionPage() {
                         : "border-border hover:bg-muted text-muted-foreground"
                     }`}
                   >
-                    Hutang
+                    {depositUsed > 0 ? "Tanpa tunai" : "Hutang"}
                   </button>
                 )}
                 {suggests.map((s) => (
@@ -760,7 +773,7 @@ export default function ConfirmTransactionPage() {
                       paidAmount === s ? "border-primary bg-primary text-primary-foreground" : "border-border hover:bg-muted"
                     }`}
                   >
-                    {s === totalAmount ? (
+                    {s === cashDueAfterDeposit ? (
                       <span className="flex items-center gap-1">
                         <span className="text-[10px] opacity-70">Pas</span>
                         {formatShort(s)}
@@ -797,6 +810,12 @@ export default function ConfirmTransactionPage() {
                     <CurrencyDisplay amount={depositUsed} className="text-sm font-bold text-blue-700 dark:text-blue-400" />
                   </div>
                 )}
+                {!isAllDebt && depositUsed > 0 && (
+                  <div className="flex items-center justify-between">
+                    <span className="text-foreground/80">Sisa perlu dibayar</span>
+                    <CurrencyDisplay amount={cashDueAfterDeposit} className="text-sm font-semibold" />
+                  </div>
+                )}
                 {!isAllDebt && (
                   <div className="flex items-center justify-between">
                     <span className="text-foreground/80">Tunai/Transfer</span>
@@ -822,10 +841,15 @@ export default function ConfirmTransactionPage() {
                   <div className="flex items-center justify-between">
                     <span className="flex items-center gap-1.5 text-blue-700 dark:text-blue-400 font-medium">
                       <Wallet className="h-3.5 w-3.5" />
-                      Kembalian / Deposit
+                      Kelebihan tunai
                     </span>
                     <CurrencyDisplay amount={overpayAmount} className="text-sm font-bold text-blue-700 dark:text-blue-400" />
                   </div>
+                )}
+                {!isAllDebt && overpayAmount > 0 && cashDueAfterDeposit <= 0 && (
+                  <p className="text-xs text-blue-700/80 dark:text-blue-300/80">
+                    Deposit sudah menutup transaksi. Nominal tunai/transfer ini akan diproses sebagai kelebihan bayar.
+                  </p>
                 )}
               </div>
             )}
@@ -974,13 +998,19 @@ export default function ConfirmTransactionPage() {
               ) : (
                 <>
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Dibayar</span>
+                    <span className="text-muted-foreground">Tunai/Transfer</span>
                     <CurrencyDisplay amount={cashLabel} />
                   </div>
                   {depositUsed > 0 && (
                     <div className="flex justify-between text-blue-600">
                       <span>Deposit dipakai</span>
                       <CurrencyDisplay amount={depositUsed} className="text-sm" />
+                    </div>
+                  )}
+                  {depositUsed > 0 && (
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Sisa setelah deposit</span>
+                      <CurrencyDisplay amount={cashDueAfterDeposit} className="text-sm" />
                     </div>
                   )}
                   {debtAmount > 0 && (
@@ -991,9 +1021,14 @@ export default function ConfirmTransactionPage() {
                   )}
                   {overpayAmount > 0 && (
                     <div className="flex justify-between font-semibold text-green-600">
-                      <span>{overpayAction === "deposit" ? "Deposit" : "Kembalian"}</span>
+                      <span>{overpayAction === "deposit" ? "Kelebihan ke deposit" : "Kembalian"}</span>
                       <CurrencyDisplay amount={overpayAmount} className="text-sm font-semibold" />
                     </div>
+                  )}
+                  {overpayAmount > 0 && cashDueAfterDeposit <= 0 && (
+                    <p className="text-xs text-blue-700 dark:text-blue-400">
+                      Deposit sudah cukup. Tunai/transfer yang diinput akan menjadi kelebihan bayar.
+                    </p>
                   )}
                   {isFullPay && debtAmount === 0 && overpayAmount === 0 && (
                     <div className="flex justify-between font-semibold text-green-600">

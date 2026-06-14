@@ -202,12 +202,15 @@ export async function confirmTransaction(
       _sum: { balance: true },
     })
     : null
-  const autoDepositUsed = customerId ? Math.min(totalAmount, Number(availableDeposit?._sum.balance ?? 0)) : 0
-  const effectivePaid = paidAmount + autoDepositUsed
-  const paymentAppliedToInvoice = Math.min(totalAmount, effectivePaid)
-  const debtAmount = Math.max(0, totalAmount - effectivePaid)
-  const overpayAmount = Math.max(0, effectivePaid - totalAmount)
-  const paymentStatus = effectivePaid >= totalAmount ? "PAID" : effectivePaid > 0 ? "PARTIAL" : "UNPAID"
+  const availableDepositBalance = Number(availableDeposit?._sum.balance ?? 0)
+  const autoDepositUsed = customerId ? Math.min(totalAmount, availableDepositBalance) : 0
+  const cashDueAfterDeposit = Math.max(0, totalAmount - autoDepositUsed)
+  const cashAppliedToInvoice = Math.min(paidAmount, cashDueAfterDeposit)
+  const paymentAppliedToInvoice = autoDepositUsed + cashAppliedToInvoice
+  const debtAmount = Math.max(0, cashDueAfterDeposit - paidAmount)
+  const overpayAmount = Math.max(0, paidAmount - cashDueAfterDeposit)
+  const effectivePaid = paymentAppliedToInvoice
+  const paymentStatus = debtAmount <= 0 ? "PAID" : paymentAppliedToInvoice > 0 ? "PARTIAL" : "UNPAID"
 
   // Validasi walk-in tidak boleh hutang
   if (!customerId && debtAmount > 0) {
@@ -223,17 +226,20 @@ export async function confirmTransaction(
     packingFee,
     totalAmount,
     paidAmount,
+    availableDeposit: availableDepositBalance,
     depositUsed: autoDepositUsed,
+    cashDueAfterDeposit,
+    cashAppliedToInvoice,
     effectivePaid,
     debtAmount,
     overpayAmount,
     paymentStatus,
-    case: effectivePaid === 0
-      ? "HUTANG_SEMUA"
-      : effectivePaid >= totalAmount && overpayAmount === 0
-      ? "LUNAS"
-      : effectivePaid > totalAmount
+    case: overpayAmount > 0
       ? `OVERPAY (action=${overpayAction})`
+      : effectivePaid === 0
+      ? "HUTANG_SEMUA"
+      : debtAmount <= 0
+      ? "LUNAS"
       : "PARTIAL",
   })
 

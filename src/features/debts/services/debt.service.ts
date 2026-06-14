@@ -224,7 +224,20 @@ export async function getCustomerLedger(customerId: string) {
   const [debts, customerPayments, orphanDebtPayments, deposits, depositUsages] = await Promise.all([
     globalPrisma.debt.findMany({
       where: { customerId },
-      include: { transaction: { select: { code: true, transactionDate: true } } },
+      include: {
+        transaction: {
+          select: {
+            code: true,
+            transactionDate: true,
+            subtotal: true,
+            discountAmount: true,
+            packingFee: true,
+            totalAmount: true,
+            paidAmount: true,
+            depositUsed: true,
+          },
+        },
+      },
       orderBy: { debtDate: "asc" },
     }),
     // Pembayaran baru — punya CustomerPayment header
@@ -263,6 +276,16 @@ export async function getCustomerLedger(customerId: string) {
     }),
   ])
 
+  type LedgerEntryMeta = {
+    notes?: string
+    allocations?: { debtCode: string; amount: number }[]
+    transactionCode?: string
+    transactionTotal?: number
+    paidAmount?: number
+    depositUsed?: number
+    debtAmount?: number
+  }
+
   type LedgerEntry = {
     date: Date
     type: "DEBT" | "PAYMENT" | "DEPOSIT_IN" | "DEPOSIT_OUT" | "DEPOSIT_RETURN"
@@ -271,21 +294,32 @@ export async function getCustomerLedger(customerId: string) {
     credit: number
     reference: string
     id: string
-    meta?: any
+    meta?: LedgerEntryMeta
   }
 
   const entries: LedgerEntry[] = []
 
   // Hutang = debit
   for (const debt of debts) {
+    const paidAmount = Number(debt.transaction.paidAmount)
+    const depositUsed = Number(debt.transaction.depositUsed)
+    const totalAmount = Number(debt.transaction.totalAmount)
+    const originalAmount = Number(debt.originalAmount)
     entries.push({
       date: debt.debtDate,
       type: "DEBT",
-      description: `Hutang dari transaksi ${debt.transaction.code}`,
-      debit: Number(debt.originalAmount),
+      description: `Sisa hutang transaksi ${debt.transaction.code}`,
+      debit: originalAmount,
       credit: 0,
       reference: debt.transaction.code,
       id: debt.id,
+      meta: {
+        transactionCode: debt.transaction.code,
+        transactionTotal: totalAmount,
+        paidAmount,
+        depositUsed,
+        debtAmount: originalAmount,
+      },
     })
   }
 
@@ -305,7 +339,7 @@ export async function getCustomerLedger(customerId: string) {
       reference: payment.id,
       id: payment.id,
       meta: {
-        notes: payment.notes,
+        notes: payment.notes ?? undefined,
         allocations: payment.allocations.map((a) => ({
           debtCode: a.debt.transaction.code,
           amount: Number(a.amount),
@@ -330,7 +364,7 @@ export async function getCustomerLedger(customerId: string) {
       reference: dp.id,
       id: dp.id,
       meta: {
-        notes: dp.notes,
+        notes: dp.notes ?? undefined,
         allocations: [{ debtCode: dp.debt.transaction.code, amount: Number(dp.amount) }],
       },
     })
@@ -356,7 +390,7 @@ export async function getCustomerLedger(customerId: string) {
       entries.push({
         date: du.createdAt,
         type: "DEPOSIT_OUT",
-        description: "Deposit dipakai",
+        description: "Deposit dipakai untuk transaksi",
         debit: Number(du.amount),
         credit: 0,
         reference: du.referenceId ?? du.depositId,
@@ -478,7 +512,7 @@ function describeCustomerLedgerEntry(entry: {
 }): string {
   switch (entry.type) {
     case "DEBT":
-      return entry.description.replace(/^Hutang dari transaksi /, "Tagihan penjualan ")
+      return entry.description.replace(/^Sisa hutang transaksi /, "Sisa hutang penjualan ")
     case "PAYMENT":
       return entry.description.includes("Overpay POS")
         ? entry.description.replace("Overpay POS", "Pembayaran dari kelebihan bayar POS")
