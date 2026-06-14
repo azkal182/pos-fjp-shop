@@ -33,6 +33,9 @@ interface TransactionDetailData {
   paidAmount: number
   changeAmount: number
   debtAmount: number
+  depositUsed: number
+  depositCreated: number
+  packingFee: number
   paymentMethod: string
   paymentStatus: string
   notes: string | null
@@ -125,14 +128,28 @@ export function TransactionDetail({ transaction }: TransactionDetailProps) {
                 <span>−<CurrencyDisplay amount={Number(transaction.discountAmount)} className="text-sm" /></span>
               </div>
             )}
+            {Number(transaction.packingFee ?? 0) > 0 && (
+              <div className="flex justify-between text-sm text-blue-600">
+                <span>Biaya Packing</span>
+                <span>+<CurrencyDisplay amount={Number(transaction.packingFee)} className="text-sm" /></span>
+              </div>
+            )}
             <div className="flex justify-between font-bold">
               <span>Total</span>
               <CurrencyDisplay amount={Number(transaction.totalAmount)} className="font-bold" />
             </div>
             <div className="flex justify-between text-sm">
-              <span className="text-muted-foreground">Bayar</span>
+              <span className="text-muted-foreground">
+                Bayar ({transaction.paymentMethod === "CASH" ? "Tunai" : "Transfer"})
+              </span>
               <CurrencyDisplay amount={Number(transaction.paidAmount)} />
             </div>
+            {Number(transaction.depositUsed ?? 0) > 0 && (
+              <div className="flex justify-between text-sm text-blue-600">
+                <span>Deposit Dipakai</span>
+                <CurrencyDisplay amount={Number(transaction.depositUsed)} className="text-sm" />
+              </div>
+            )}
             {Number(transaction.changeAmount) > 0 && (
               <div className="flex justify-between text-sm text-green-600">
                 <span>Kembalian</span>
@@ -143,6 +160,12 @@ export function TransactionDetail({ transaction }: TransactionDetailProps) {
               <div className="flex justify-between text-sm text-red-600 font-medium">
                 <span>Hutang</span>
                 <CurrencyDisplay amount={Number(transaction.debtAmount)} className="text-sm" />
+              </div>
+            )}
+            {Number(transaction.depositCreated ?? 0) > 0 && (
+              <div className="flex justify-between text-sm text-blue-600 font-medium">
+                <span>Deposit Disimpan</span>
+                <CurrencyDisplay amount={Number(transaction.depositCreated)} className="text-sm" />
               </div>
             )}
             {transaction.notes && (

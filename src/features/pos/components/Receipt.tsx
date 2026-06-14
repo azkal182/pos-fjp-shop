@@ -21,6 +21,8 @@ interface ReceiptTransaction {
   paidAmount: number
   changeAmount: number
   debtAmount: number
+  depositUsed?: number
+  depositCreated?: number
   paymentMethod: string
   paymentStatus: string
   transactionDate: string
@@ -121,6 +123,12 @@ export function Receipt({ transaction, onClose }: ReceiptProps) {
           <span className="text-muted-foreground">Bayar ({transaction.paymentMethod === "CASH" ? "Tunai" : "Transfer"})</span>
           <CurrencyDisplay amount={Number(transaction.paidAmount)} />
         </div>
+        {Number(transaction.depositUsed ?? 0) > 0 && (
+          <div className="flex justify-between text-blue-600">
+            <span>Deposit Dipakai</span>
+            <CurrencyDisplay amount={Number(transaction.depositUsed)} />
+          </div>
+        )}
         {Number(transaction.changeAmount) > 0 && (
           <div className="flex justify-between text-green-600 font-medium">
             <span>Kembalian</span>
@@ -131,6 +139,12 @@ export function Receipt({ transaction, onClose }: ReceiptProps) {
           <div className="flex justify-between text-red-600 font-medium">
             <span>Hutang</span>
             <CurrencyDisplay amount={Number(transaction.debtAmount)} className="text-sm font-semibold" />
+          </div>
+        )}
+        {Number(transaction.depositCreated ?? 0) > 0 && (
+          <div className="flex justify-between text-blue-600 font-medium">
+            <span>Deposit Disimpan</span>
+            <CurrencyDisplay amount={Number(transaction.depositCreated)} className="text-sm font-semibold" />
           </div>
         )}
       </div>

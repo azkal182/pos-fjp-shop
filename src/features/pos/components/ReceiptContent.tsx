@@ -19,6 +19,8 @@ export interface ReceiptTransaction {
   paidAmount: number | string
   changeAmount: number | string
   debtAmount: number | string
+  depositUsed?: number | string | null
+  depositCreated?: number | string | null
   paymentMethod: string
   paymentStatus: string
   transactionDate: string | Date
@@ -73,6 +75,8 @@ export function ReceiptContent({
   const paid      = toNum(transaction.paidAmount)
   const change    = toNum(transaction.changeAmount)
   const debt      = toNum(transaction.debtAmount)
+  const depositUsed = toNum(transaction.depositUsed ?? 0)
+  const depositCreated = toNum(transaction.depositCreated ?? 0)
 
   const paymentLabel = transaction.paymentMethod === "CASH" ? "Tunai" : "Transfer"
   const statusLabel  =
@@ -202,16 +206,18 @@ export function ReceiptContent({
       <div style={sep("dashed")} />
 
       {/* ── Summary ── */}
-      {discount > 0 && (
+      {(discount > 0 || packing > 0) && (
         <>
           <div style={row}>
             <span style={rowLabel}>Subtotal</span>
-            <span style={rowValue}>{formatRp(subtotal + discount)}</span>
+            <span style={rowValue}>{formatRp(subtotal)}</span>
           </div>
-          <div style={row}>
-            <span style={rowLabel}>Diskon</span>
-            <span style={rowValue}>-{formatRp(discount)}</span>
-          </div>
+          {discount > 0 && (
+            <div style={row}>
+              <span style={rowLabel}>Diskon</span>
+              <span style={rowValue}>-{formatRp(discount)}</span>
+            </div>
+          )}
         </>
       )}
       {packing > 0 && (
@@ -240,6 +246,12 @@ export function ReceiptContent({
         <span style={rowLabel}>Bayar ({paymentLabel})</span>
         <span style={rowValue}>{formatRp(paid)}</span>
       </div>
+      {depositUsed > 0 && (
+        <div style={row}>
+          <span style={rowLabel}>Deposit Dipakai</span>
+          <span style={rowValue}>{formatRp(depositUsed)}</span>
+        </div>
+      )}
       {change > 0 && (
         <div style={{ ...row, fontWeight: "bold" }}>
           <span style={rowLabel}>Kembalian</span>
@@ -250,6 +262,12 @@ export function ReceiptContent({
         <div style={{ ...row, fontWeight: "bold" }}>
           <span style={rowLabel}>Hutang</span>
           <span style={rowValue}>{formatRp(debt)}</span>
+        </div>
+      )}
+      {depositCreated > 0 && (
+        <div style={{ ...row, fontWeight: "bold" }}>
+          <span style={rowLabel}>Deposit Disimpan</span>
+          <span style={rowValue}>{formatRp(depositCreated)}</span>
         </div>
       )}
 

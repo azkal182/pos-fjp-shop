@@ -56,6 +56,8 @@ export default async function PrintReceiptPage({ params }: Props) {
     paidAmount:     Number(raw.paidAmount),
     changeAmount:   Number(raw.changeAmount),
     debtAmount:     Number(raw.debtAmount),
+    depositUsed:    Number(raw.depositUsed),
+    depositCreated: Number(raw.depositCreated),
     paymentMethod:  raw.paymentMethod,
     paymentStatus:  raw.paymentStatus,
     transactionDate: raw.transactionDate.toISOString(),
